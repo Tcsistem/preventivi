@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Preventivi TCS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- ============ ACCESSO ============ -->
+<div id="loginRoot" class="login" hidden>
+  <div class="dialog">
+    <h1><b>TCS</b> Preventivi</h1>
+    <p class="hint" id="loginIntro">Accedi con la tua email aziendale.</p>
+    <form id="fLogin">
+      <label class="f">Email<input id="lEmail" type="email" autocomplete="username" required></label>
+      <label class="f">Password<input id="lPwd" type="password" autocomplete="current-password" required></label>
+      <div class="err" id="lErr" role="alert"></div>
+      <button class="btn primary" type="submit" style="justify-content:center">Accedi</button>
+      <button class="btn ghost" type="button" id="bRecupera">Password dimenticata?</button>
+    </form>
+    <form id="fNuovaPwd" hidden>
+      <label class="f">Nuova password (almeno 8 caratteri)<input id="nPwd" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label class="f">Ripeti la password<input id="nPwd2" type="password" autocomplete="new-password" minlength="8" required></label>
+      <div class="err" id="nErr" role="alert"></div>
+      <button class="btn primary" type="submit" style="justify-content:center">Salva password ed entra</button>
+    </form>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="appRoot" hidden>
+<div class="bar">
+  <div class="bar-top">
+    <div class="brand"><h1><b>TCS</b> Preventivi</h1></div>
+    <div class="status" id="status"><span class="dot" id="dot"></span><span id="statusText">Caricamento…</span></div>
+    <div class="user"><span>Accesso: <b id="userName"></b></span><button class="btn sm" id="bEsci" type="button">Esci</button></div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" data-view="offerta" aria-selected="true">Offerta</button>
+    <button class="tab" role="tab" data-view="archivio" aria-selected="false">Archivio</button>
+    <button class="tab" role="tab" data-view="clienti" aria-selected="false">Clienti</button>
+    <button class="tab" role="tab" data-view="impostazioni" aria-selected="false">Impostazioni</button>
+  </nav>
+</div>
+<div class="banner" id="banner" hidden></div>
+
+<main>
+<!-- ============ OFFERTA ============ -->
+<section class="view" id="v-offerta">
+  <div class="work">
+    <div>
+      <div class="card">
+        <div class="card-h">
+          <h2>Offerta <span id="hNum" class="num"></span></h2>
+          <span class="chip" id="hStato">Bozza</span>
+          <div class="sp row">
+            <button class="btn" id="bNuova" type="button">Nuova</button>
+            <button class="btn" id="bDuplica" type="button">Duplica</button>
+          </div>
+        </div>
+        <div class="grid g4">
+          <label class="f span2">Spett.le (cliente)
+            <input id="oCliente" list="dlClienti" autocomplete="off" placeholder="Cerca per nome o P.IVA">
+          </label>
+          <label class="f">Offerta nr.<input id="oNumero" class="num"></label>
+          <label class="f">Data<input id="oData" type="date"></label>
+          <div class="span2"><div class="hint" id="oClienteInfo" style="white-space:pre-line;min-height:18px"></div></div>
+          <label class="f">Cortese attenzione<input id="oAttenzione"></label>
+          <label class="f">Stato
+            <select id="oStato"><option>Bozza</option><option>Inviata</option><option>Accettata</option><option>Persa</option></select>
+          </label>
+          <label class="f">Redatto da<input id="oRedatto" list="dlStaff"></label>
+          <label class="f">Responsabile commessa<input id="oResp" list="dlStaff"></label>
+          <label class="f span2">Oggetto<input id="oOggetto" placeholder="Es. Adeguamento impianto elettrico capannone"></label>
+        </div>
+      </div>
+
+      <div class="card" id="cardRighe">
+        <div class="card-h">
+          <h2>Righe</h2>
+          <div class="seg" role="group" aria-label="Modalità">
+            <button type="button" id="mMisura" aria-pressed="true">A misura</button>
+            <button type="button" id="mCorpo" aria-pressed="false">A corpo</button>
+          </div>
+          <span class="hint sp" id="corpoHint" hidden>A corpo: in stampa si vede solo il totale</span>
+        </div>
+        <div class="tablewrap">
+          <table class="righe" id="tRighe">
+            <thead><tr>
+              <th>#</th><th>U.M.</th><th style="min-width:240px">Descrizione</th><th class="r">Q.tà</th>
+              <th class="r">Mat. unit. a noi</th><th class="r">Ore</th><th class="r">Persone</th>
+              <th class="calc r hide-corpo">Fornitura</th><th class="calc r hide-corpo">Posa</th><th class="calc r">Totale</th><th></th>
+            </tr></thead>
+            <tbody id="tbRighe"></tbody>
+          </table>
+        </div>
+        <div class="row addrow">
+          <button class="btn" id="bAddRow" type="button">+ Aggiungi riga</button>
+          <button class="btn ghost danger" id="bSvuota" type="button">Svuota righe</button>
+          <span class="hint">Fornitura e posa sono prezzi unitari al cliente. Ogni riga nuova ha già tutti i calcoli.</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h2>Condizioni di fornitura</h2></div>
+        <div class="grid g3">
+          <label class="f">Validità (giorni)<input id="cValidita" type="number" min="0" class="num"></label>
+          <label class="f">Garanzia<input id="cGaranzia"></label>
+          <label class="f">Consegna<input id="cConsegna"></label>
+          <label class="f">Fatturazione<input id="cFatturazione" list="dlFatt" autocomplete="off"></label>
+          <label class="f span2">Modalità di pagamento
+            <input id="cPagamento" list="dlPag" autocomplete="off" placeholder="Scegli dall'elenco o scrivi una condizione nuova">
+          </label>
+          <label class="f">IVA<input id="cIva"></label>
+          <label class="f span2">Esclusioni<input id="cEsclusioni"></label>
+        </div>
+        <p class="hint" style="margin:8px 0 0">Fatturazione e pagamento propongono l'elenco ma accettano anche testo libero (es. un pagamento provvisorio).</p>
+      </div>
+    </div>
+
+    <aside class="side">
+      <div class="card conti">
+        <div class="card-h" style="margin-bottom:4px"><h2>Conti</h2><span class="chip sp" id="chipModo">A misura</span></div>
+        <label class="switch"><input type="checkbox" id="oTrasferta"><span><b>Trasferta</b> <span class="hint" id="trasfHint">non attiva</span></span></label>
+        <div class="sec">
+          <h3>Costi a noi</h3>
+          <div class="kv" id="kvNoi"></div>
+        </div>
+        <div class="sec">
+          <h3>Costi con ricarico</h3>
+          <div class="kv" id="kvCli"></div>
+        </div>
+        <div class="big">
+          <div><div class="lab">Totale preventivo</div><div class="val" id="vPrev">0</div></div>
+          <div class="guad" id="boxGuad"><div class="lab">Guadagno</div><div class="val" id="vGuad">0</div></div>
+        </div>
+        <div class="stampa-tot" id="stampaTot"></div>
+        <div class="sec kv" id="kvOre"></div>
+      </div>
+      <div class="card">
+        <details class="params" id="detParams">
+          <summary>Parametri di questa offerta</summary>
+          <div class="row" id="paramLock" style="margin-top:10px"><span class="chip warn">bloccati</span><button class="btn sm" id="bSbloccaParam" type="button">Sblocca con password</button></div>
+          <div class="grid g2" id="paramGrid"></div>
+          <p class="hint" style="margin:8px 0 0">I valori iniziali arrivano da Impostazioni; qui li cambi solo per questa offerta.</p>
+        </details>
+      </div>
+      <div class="card">
+        <div class="row">
+          <button class="btn primary" id="bSalva" type="button">Salva offerta</button>
+          <button class="btn navy" id="bAnteprima" type="button">Anteprima e stampa</button>
+        </div>
+        <p class="hint" style="margin:8px 0 0" id="saveHint"></p>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ ARCHIVIO ============ -->
+<section class="view" id="v-archivio" hidden>
+  <div class="card">
+    <div class="card-h">
+      <h2>Archivio offerte</h2>
+      <input class="inp search sp" id="aCerca" placeholder="Cerca cliente, numero o oggetto">
+    </div>
+    <div class="tablewrap" style="border:0">
+      <table class="list" id="tArchivio">
+        <thead><tr><th>Nr.</th><th>Data</th><th>Cliente</th><th>Oggetto</th><th>Modalità</th><th class="r">Totale offerta</th><th class="r">Guadagno</th><th>Stato</th><th>Ultima modifica</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CLIENTI ============ -->
+<section class="view" id="v-clienti" hidden>
+  <div class="card">
+    <div class="card-h">
+      <h2>Clienti</h2><span class="chip" id="cliCount">0</span>
+      <div class="sp row">
+        <input class="inp search" id="cCerca" placeholder="Cerca nome, P.IVA, città">
+        <button class="btn" id="bNuovoCli" type="button">+ Nuovo cliente</button>
+        <button class="btn navy" id="bImporta" type="button">Importa file…</button>
+        <input type="file" id="fImporta" accept=".xls,.xlsx,.csv,.txt" hidden>
+      </div>
+    </div>
+    <div class="tablewrap" style="border:0">
+      <table class="list" id="tClienti">
+        <thead><tr><th>Ragione sociale</th><th>Indirizzo</th><th>CAP</th><th>Città</th><th>Prov.</th><th>P.IVA / C.F.</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ IMPOSTAZIONI ============ -->
+<section class="view" id="v-impostazioni" hidden>
+  <div class="card" id="setLock">
+    <div class="card-h"><h2>Impostazioni protette</h2><span class="chip warn">password</span></div>
+    <p class="hint" id="lockIntro" style="margin-top:0">Ricarichi, tariffe, elenchi e intestazione si modificano solo con la password delle impostazioni.</p>
+    <form id="fSblocca" class="row" style="align-items:flex-end">
+      <label class="f" style="min-width:220px">Password impostazioni<input id="sbPwd" type="password" autocomplete="off" required></label>
+      <button class="btn primary" type="submit">Sblocca</button>
+      <span class="hint" id="sbErr" role="alert"></span>
+    </form>
+    <form id="fPrimaPwd" class="row" style="align-items:flex-end" hidden>
+      <label class="f" style="min-width:200px">Nuova password (min. 4 caratteri)<input id="ppPwd" type="password" autocomplete="new-password" minlength="4" required></label>
+      <label class="f" style="min-width:200px">Ripeti<input id="ppPwd2" type="password" autocomplete="new-password" minlength="4" required></label>
+      <button class="btn primary" type="submit">Imposta password</button>
+      <span class="hint" id="ppErr" role="alert"></span>
+    </form>
+  </div>
+  <div id="setBody" hidden>
+  <div class="card">
+    <div class="card-h"><h2>Parametri predefiniti</h2><span class="hint">usati per ogni offerta nuova</span></div>
+    <div class="grid g4" id="setParam"></div>
+  </div>
+  <div class="card">
+    <div class="card-h"><h2>Elenchi</h2></div>
+    <div class="grid g4">
+      <label class="f span2">Modalità di pagamento (una per riga)<textarea id="sPag" rows="10"></textarea></label>
+      <label class="f">Unità di misura<textarea id="sUm" rows="6"></textarea></label>
+      <label class="f">Fatturazione<textarea id="sFatt" rows="6"></textarea></label>
+      <label class="f span2">Personale (redatto da / responsabile)<textarea id="sStaff" rows="6"></textarea></label>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-h"><h2>Intestazione azienda</h2><span class="hint">compare in testa all'offerta stampata</span></div>
+    <div class="grid g3">
+      <label class="f">Ragione sociale<input id="sAzNome"></label>
+      <label class="f span2">Righe di dettaglio (indirizzo, telefono, P.IVA…)<textarea id="sAzDet" rows="5"></textarea></label>
+      <label class="f">Telefono per chiarimenti<input id="sAzTel"></label>
+    </div>
+  </div>
+  <div class="card"><div class="row"><button class="btn primary" id="bSalvaSet" type="button">Salva impostazioni</button><button class="btn" id="bBlocca" type="button">Blocca di nuovo</button><span class="hint" id="setHint"></span></div></div>
+  <div class="card">
+    <div class="card-h"><h2>Password impostazioni</h2><span class="hint">vale per tutti gli utenti</span></div>
+    <form id="fCambiaPwd" class="row" style="align-items:flex-end">
+      <label class="f" style="min-width:180px">Password attuale<input id="cpOld" type="password" autocomplete="off" required></label>
+      <label class="f" style="min-width:180px">Nuova password<input id="cpNew" type="password" autocomplete="new-password" minlength="4" required></label>
+      <label class="f" style="min-width:180px">Ripeti<input id="cpNew2" type="password" autocomplete="new-password" minlength="4" required></label>
+      <button class="btn" type="submit">Cambia password</button>
+      <span class="hint" id="cpErr" role="alert"></span>
+    </form>
+  </div>
+  </div>
+  <div class="card">
+    <div class="card-h"><h2>Il tuo profilo</h2><span class="hint">il nome compare in archivio su chi ha creato o modificato un'offerta</span></div>
+    <div class="row"><label class="f" style="min-width:240px">Nome<input id="pNome"></label><button class="btn" id="bSalvaNome" type="button" style="align-self:flex-end">Salva nome</button></div>
+  </div>
+</section>
+</main>
+
+<datalist id="dlClienti"></datalist><datalist id="dlPag"></datalist><datalist id="dlFatt"></datalist><datalist id="dlStaff"></datalist>
+<div id="layer"></div>
+</div>
+
+<div id="printArea"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/prova.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
