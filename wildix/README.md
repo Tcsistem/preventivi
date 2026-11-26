@@ -1,4 +1,4 @@
-# Preventivatore Wildix (TC Sistem)
+# TC Sistem Preventivi (preventivatore Wildix e materiali)
 
 Web app per fare offerte Wildix e non Wildix, con stampa/PDF per il cliente e analisi interna di costi e margini.
 
@@ -15,7 +15,8 @@ Indirizzo: **https://tcsistem.github.io/preventivi/wildix/**
 - **Costi a me** (mai stampati sull'offerta): ore di installazione, trasferte, canoni dei fornitori, provvigioni… con voci rapide configurabili. Il quadro economico mostra ricavo, costo e margine per periodo e il **margine del primo anno**.
 - **Anteprima / PDF**: foglio A4 per il cliente (scegli se mostrare codici, prezzi unitari, listino e sconto, descrizioni originali in inglese). “Stampa / Salva PDF” → nella finestra di stampa scegli *Salva come PDF*.
 - **Stampa costi interni**: foglio A4 con costi, ricavi e margini riga per riga, marcato “documento interno”.
-- **Archivio**, **Clienti** (anche import CSV), **Listini** (versioni, articoli miei), **Impostazioni** (intestazione con logo, sconti e condizioni predefinite).
+- **Materiali**: database dei materiali e servizi di uso comune (anche non Wildix) con codice, marca, categoria, U.M., costo e prezzo (senza prezzo si applica il ricarico predefinito). Inserimento manuale, import da Excel/CSV (`codice, descrizione, categoria, marca, um, costo, prezzo, periodo`; stesso codice = aggiornamento), export CSV, e pulsante 💾 per salvare una riga libera dell'offerta.
+- **Archivio**, **Clienti** (anche import CSV), **Listini Wildix** (versioni), **Impostazioni** (intestazione con logo, sconti e condizioni predefinite).
 
 Le offerte copiano dentro di sé i prezzi: quando carichi un listino nuovo, le offerte vecchie non cambiano.
 

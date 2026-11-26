@@ -84,6 +84,9 @@ create table if not exists public.wx_listino (
   unique (versione, listino, codice, fascia)
 );
 create index if not exists wx_listino_ver_idx on public.wx_listino (versione, listino);
+-- materiali propri: marca e unità di misura
+alter table public.wx_listino add column if not exists marca text not null default '';
+alter table public.wx_listino add column if not exists um    text not null default '';
 
 -- ---------------------------------------------------------------------
 -- Offerte

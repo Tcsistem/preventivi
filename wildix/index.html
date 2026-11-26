@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Preventivatore Wildix</title>
+<title>TC Sistem Preventivi</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="../css/app.css?v=202611262342">
-<link rel="stylesheet" href="css/wx.css?v=202611262342">
+<link rel="stylesheet" href="../css/app.css?v=202611262348">
+<link rel="stylesheet" href="css/wx.css?v=202611262348">
 </head>
 <body>
 
 <!-- ============ ACCESSO ============ -->
 <div id="loginRoot" class="login" hidden>
   <div class="dialog">
-    <h1><b>Wildix</b> Preventivi</h1>
+    <h1><b>TC Sistem</b> Preventivi</h1>
     <p class="hint" id="loginIntro">Accedi con la tua email.</p>
     <form id="fLogin">
       <label class="f">Email<input id="lEmail" type="email" autocomplete="username" required></label>
@@ -36,7 +36,7 @@
 <div id="appRoot" hidden>
 <div class="bar">
   <div class="bar-top">
-    <div class="brand"><h1><b>Wildix</b> Preventivi</h1><small id="brandAz"></small></div>
+    <div class="brand"><h1><b>TC Sistem</b> Preventivi</h1></div>
     <div class="status"><span class="dot" id="dot"></span><span id="statusText">Caricamento…</span></div>
     <div class="user"><span>Accesso: <b id="userName"></b></span><button class="btn sm" id="bEsci" type="button">Esci</button></div>
   </div>
@@ -44,7 +44,8 @@
     <button class="tab" role="tab" data-view="offerta" aria-selected="true">Offerta</button>
     <button class="tab" role="tab" data-view="archivio" aria-selected="false">Archivio</button>
     <button class="tab" role="tab" data-view="clienti" aria-selected="false">Clienti</button>
-    <button class="tab" role="tab" data-view="listini" aria-selected="false">Listini</button>
+    <button class="tab" role="tab" data-view="materiali" aria-selected="false">Materiali</button>
+    <button class="tab" role="tab" data-view="listini" aria-selected="false">Listini Wildix</button>
     <button class="tab" role="tab" data-view="impostazioni" aria-selected="false">Impostazioni</button>
   </nav>
 </div>
@@ -94,7 +95,7 @@
             <button type="button" data-l="CAPEX" aria-pressed="false">Capex</button>
             <button type="button" data-l="OPEX" aria-pressed="false">Opex</button>
             <button type="button" data-l="CLASSOUND" aria-pressed="false">Classound</button>
-            <button type="button" data-l="PERSONALE" aria-pressed="false">Miei</button>
+            <button type="button" data-l="PERSONALE" aria-pressed="false">Materiali</button>
           </div>
           <select class="inp" id="qPer" style="width:auto">
             <option value="*">Ogni periodo</option><option value="">Una tantum</option><option value="1m">Mensile</option><option value="1y">Annuale</option><option value="5y">5 anni</option>
@@ -228,12 +229,25 @@
     <div class="hint" id="impHint" style="margin-top:6px"></div>
   </div>
 
+</section>
+
+<!-- ============ MATERIALI ============ -->
+<section class="view" id="v-materiali" hidden>
   <div class="card">
-    <div class="card-h"><h2>Articoli miei</h2>
-      <span class="hint">Prodotti e servizi non Wildix con il tuo costo e il tuo prezzo: li trovi nella ricerca sotto “Miei”.</span>
-      <button class="btn sp" id="bNuovoArt" type="button">+ Nuovo articolo</button>
+    <div class="card-h"><h2>Materiali</h2>
+      <span class="hint" id="matInfo"></span>
+      <div class="sp row">
+        <input class="inp search" id="qMat" type="search" placeholder="Cerca codice, descrizione, marca">
+        <select class="inp" id="qMatCat" style="width:auto"><option value="">Ogni categoria</option></select>
+        <button class="btn primary" id="bNuovoArt" type="button">+ Nuovo materiale</button>
+        <label class="btn" style="cursor:pointer">Importa Excel / CSV<input type="file" id="fMat" accept=".csv,.xlsx,.xls,text/csv" hidden></label>
+        <button class="btn" id="bEspMat" type="button">Esporta CSV</button>
+      </div>
     </div>
     <div id="mieiList"></div>
+    <p class="hint">Il tuo database di materiali e servizi di uso comune (anche non Wildix): li ritrovi nella ricerca dell'offerta sotto “Materiali”.
+      Puoi anche salvare qui una riga libera dell'offerta con il pulsante 💾. Per l'import, prima riga con le intestazioni:
+      <b>codice, descrizione, categoria, marca, um, costo, prezzo, periodo</b> (prezzo e periodo facoltativi: senza prezzo si usa il ricarico predefinito; periodo vuoto, mensile o annuale). Stesso codice = aggiornamento.</p>
   </div>
 </section>
 
@@ -282,8 +296,8 @@
 <div id="printArea"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="js/config.js?v=202611262342"></script>
-<script src="js/prova.js?v=202611262342"></script>
-<script src="js/app.js?v=202611262342"></script>
+<script src="js/config.js?v=202611262348"></script>
+<script src="js/prova.js?v=202611262348"></script>
+<script src="js/app.js?v=202611262348"></script>
 </body>
 </html>

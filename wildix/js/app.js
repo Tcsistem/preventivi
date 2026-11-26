@@ -117,8 +117,8 @@ function cerca(){
     const arr = S.byCode.get(a.listino+"|"+a.codice) || [a]; const first = arr[0];
     const fasce = arr.length > 1 ? `${arr.length} fasce di quantità · ` : "";
     const per = PER_LAB[a.periodo||""];
-    return `<div class="art"><div class="cod"><span class="tag ${a.listino}">${a.listino==="PERSONALE"?"MIEI":esc(a.listino)}</span>${esc(a.codice)}</div>
-      <div class="des">${esc(a.descrizione)}<small>${esc(a.categoria)} · ${per}${a.listino==="CLASSOUND"&&a.fascia?" · "+esc(a.fascia):""} · ${fasce}${arr.length>1?"prezzi della prima fascia ("+esc(first.fascia)+")":""}</small></div>
+    return `<div class="art"><div class="cod"><span class="tag ${a.listino}">${a.listino==="PERSONALE"?"MAT":esc(a.listino)}</span>${esc(a.codice)}</div>
+      <div class="des">${esc(a.descrizione)}<small>${esc([a.marca, a.categoria].filter(Boolean).join(" · "))}${a.um?" · "+esc(a.um):""} · ${per}${a.listino==="CLASSOUND"&&a.fascia?" · "+esc(a.fascia):""} · ${fasce}${arr.length>1?"prezzi della prima fascia ("+esc(first.fascia)+")":""}</small></div>
       <div class="pz g">Costo<b>${eur(first.prezzo_gold)}</b></div><div class="pz">Listino<b>${eur(first.prezzo_eu)}</b></div>
       <button class="btn sm" type="button" data-add="${esc(k_(a))}">+ Aggiungi</button></div>`;
   }).join("") + (out.length > 80 ? `<div class="more">Altri risultati: scrivi qualche parola in più.</div>` : "");
@@ -135,7 +135,8 @@ $("#artRes").addEventListener("click", e => {
   const a = fasciaPer(fonte, codice, 1); if (!a) return;
   const sc = num(S.offer.parametri.sconto);
   const r = {id:uid(), tipo:"art", fonte, codice, descr:a.descrizione, descrEn:a.descrizione, categoria:a.categoria,
-    periodo:a.periodo||"", qta:1, costo:a.prezzo_gold, listino:a.prezzo_eu, perc: fonte==="PERSONALE" ? 0 : sc, prezzo:0, fascia:a.fascia||"", auto:true};
+    periodo:a.periodo||"", qta:1, costo:a.prezzo_gold, listino:a.prezzo_eu, perc: fonte==="PERSONALE" ? 0 : sc, prezzo:0, fascia:a.fascia||"", auto:true, um:a.um||""};
+  if (fonte === "PERSONALE" && !(num(a.prezzo_eu) > 0)){ r.modo = "ric"; r.perc = num(S.offer.parametri.ricarico); }
   ricalcolaPrezzo(r);
   if (fonte !== "PERSONALE") S.offer.versione = S.settings.versione;
   S.offer.righe.push(r); renderRighe(); update(); markDirty();
@@ -198,6 +199,7 @@ function show(view){
   if (view==="archivio") renderArchivio();
   if (view==="clienti") renderClienti();
   if (view==="listini") renderListini();
+  if (view==="materiali") renderMiei();
   if (view==="impostazioni") renderSettings();
   window.scrollTo(0,0);
 }
@@ -239,17 +241,16 @@ $("#oCliente").addEventListener("input", e => {
 function fillDatalists(){
   $("#dlClienti").innerHTML = S.clienti.slice(0,3000).map(c=>`<option value="${esc(c.rs)}">${esc([c.citta,c.piva].filter(Boolean).join(" · "))}</option>`).join("");
   $("#selPreset").innerHTML = `<option value="">+ Voce rapida…</option>` + (S.settings.preset||[]).map((p,i)=>`<option value="${i}">${esc(p.descr)} (${eur(p.costo)}${p.periodo?" "+PER_LAB[p.periodo].toLowerCase():""})</option>`).join("");
-  $("#brandAz").textContent = S.settings.azienda.nome || "";
-}
+  }
 
 /* ---------------------------------------------------------------- editor: righe */
 const perSel = (v, k="periodo") => `<select data-k="${k}">${PERIODI.map(([p,l])=>`<option value="${p}"${(v||"")===p?" selected":""}>${l}</option>`).join("")}</select>`;
 function rigaHtml(r, i){
-  const act = `<div class="acts"><button class="btn sm ghost" data-a="su" title="Sposta su" type="button">↑</button><button class="btn sm ghost" data-a="giu" title="Sposta giù" type="button">↓</button><button class="btn sm ghost danger" data-a="via" title="Elimina riga" type="button">✕</button></div>`;
+  const act = `<div class="acts"><button class="btn sm ghost" data-a="su" title="Sposta su" type="button">↑</button><button class="btn sm ghost" data-a="giu" title="Sposta giù" type="button">↓</button><button class="btn sm ghost danger" data-a="via" title="Elimina riga" type="button">✕</button>${r.tipo==="libera"?`<button class="btn sm ghost" data-a="salva" title="Salva nei Materiali" type="button">💾</button>`:""}</div>`;
   if (r.tipo === "sez") return `<tr class="sez" data-i="${i}"><td class="idx">§${act}</td><td class="in" colspan="10"><input data-k="descr" value="${esc(r.descr)}" placeholder="Titolo di sezione (es. Telefoni e accessori)"></td></tr>`;
   const tiers = r.tipo==="art" ? (S.byCode.get(r.fonte+"|"+r.codice)||[]).length : 0;
   const cod = r.tipo === "art"
-    ? `<td class="cod"><span class="tag ${esc(r.fonte)}">${r.fonte==="PERSONALE"?"MIEI":esc(r.fonte)}</span>${esc(r.codice)}${r.fascia ? `<br><span class="fascia" title="${tiers>1?"Fascia scelta in automatico dalla quantità":""}">${r.fonte==="CLASSOUND"?"":"fascia "}${esc(r.fascia)}</span>` : ""}</td>`
+    ? `<td class="cod"><span class="tag ${esc(r.fonte)}">${r.fonte==="PERSONALE"?"MAT":esc(r.fonte)}</span>${esc(r.codice)}${r.fascia ? `<br><span class="fascia" title="${tiers>1?"Fascia scelta in automatico dalla quantità":""}">${r.fonte==="CLASSOUND"?"":"fascia "}${esc(r.fascia)}</span>` : ""}</td>`
     : `<td class="in"><input data-k="codice" value="${esc(r.codice)}" placeholder="Codice" style="min-width:90px"><span class="tag LIBERA">LIBERA</span></td>`;
   return `<tr data-i="${i}"><td class="idx">${i+1}${act}</td>${cod}
     <td class="in"><textarea data-k="descr" rows="2">${esc(r.descr)}</textarea></td>
@@ -307,6 +308,8 @@ $("#tbRighe").addEventListener("change", e => {
 $("#tbRighe").addEventListener("click", e => {
   const b = e.target.closest("[data-a]"); if (!b) return;
   const i = +b.closest("tr").dataset.i, R = S.offer.righe;
+  if (b.dataset.a === "salva"){ const r = R[i];
+    return editArticolo(null, {codice:r.codice||"", descrizione:r.descr||"", categoria:"", marca:"", um:r.um||"", periodo:r.periodo||"", prezzo_gold:r.costo, prezzo_eu:r.prezzo}); }
   if (b.dataset.a === "via") R.splice(i,1);
   if (b.dataset.a === "su" && i > 0) [R[i-1], R[i]] = [R[i], R[i-1]];
   if (b.dataset.a === "giu" && i < R.length-1) [R[i+1], R[i]] = [R[i], R[i+1]];
@@ -541,7 +544,6 @@ async function renderListini(){
     : `<div class="empty"><b>Nessun listino nel database</b>Premi il pulsante qui sotto per caricare il listino Wildix di Novembre 2026.</div>`;
   $("#selVersione").innerHTML = vers.length ? vers.map(v=>`<option${v===S.settings.versione?" selected":""}>${esc(v)}</option>`).join("") : `<option value="">—</option>`;
   $("#inclusi").innerHTML = LISTINI_INCLUSI.map((l,i)=>`<button class="btn primary" data-inc="${i}" type="button">${vers.includes(l.versione)?"Ricarica":"Carica"} listino incluso: ${esc(l.versione)} (Capex, Opex, Classound)</button>`).join("");
-  renderMiei();
 }
 $("#verList").addEventListener("click", e => {
   const b = e.target.closest("[data-delv]"); if (!b) return;
@@ -576,38 +578,106 @@ $("#fListino").addEventListener("change", async e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
   try{ await importaListino(JSON.parse(await f.text())); toast("Listino caricato"); } catch(err){ toast(errMsg(err)); $("#impHint").textContent = errMsg(err); }
 });
+const MAT_CAMPI = ["codice","descrizione","categoria","marca","um","prezzo_gold","prezzo_eu","periodo"];
+function materiali(){ return S.listino.filter(a => a.listino === "PERSONALE"); }
 function renderMiei(){
-  const M = S.listino.filter(a => a.listino === "PERSONALE");
-  $("#mieiList").innerHTML = M.length ? `<table class="list"><thead><tr><th>Codice</th><th>Descrizione</th><th>Categoria</th><th>Periodo</th><th class="r">Costo a me</th><th class="r">Prezzo cliente</th></tr></thead><tbody>
-    ${M.map(a=>`<tr class="click" data-id="${esc(a.id)}"><td><b>${esc(a.codice)}</b></td><td>${esc(a.descrizione)}</td><td>${esc(a.categoria)}</td><td>${PER_LAB[a.periodo||""]}</td><td class="r">${eur(a.prezzo_gold)}</td><td class="r">${eur(a.prezzo_eu)}</td></tr>`).join("")}</tbody></table>`
-    : `<div class="empty"><b>Nessun articolo tuo</b>Es. switch, router, cablaggio, ore di installazione, connettività: inserisci costo e prezzo una volta e li ritrovi nella ricerca.</div>`;
+  const M = materiali();
+  const cats = [...new Set(M.map(a=>a.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const selC = $("#qMatCat"), curC = selC.value;
+  selC.innerHTML = `<option value="">Ogni categoria</option>` + cats.map(c=>`<option${c===curC?" selected":""}>${esc(c)}</option>`).join("");
+  const words = $("#qMat").value.toLowerCase().split(/\s+/).filter(Boolean), cat = selC.value;
+  const L = M.filter(a => (!cat || a.categoria === cat) && words.every(w => [a.codice,a.descrizione,a.marca,a.categoria].join(" ").toLowerCase().includes(w)))
+             .sort((a,b)=>(a.categoria||"").localeCompare(b.categoria||"") || a.descrizione.localeCompare(b.descrizione));
+  $("#matInfo").textContent = M.length ? `${M.length} materiali` : "";
+  $("#mieiList").innerHTML = L.length ? `<div class="tablewrap" style="border:0"><table class="list"><thead><tr><th>Codice</th><th>Descrizione</th><th>Marca</th><th>Categoria</th><th>U.M.</th><th>Periodo</th><th class="r">Costo a me</th><th class="r">Prezzo cliente</th><th class="r">Ricarico</th></tr></thead><tbody>
+    ${L.slice(0,500).map(a=>`<tr class="click" data-id="${esc(a.id)}"><td><b>${esc(a.codice)}</b></td><td>${esc(a.descrizione)}</td><td>${esc(a.marca)}</td><td>${esc(a.categoria)}</td><td>${esc(a.um)}</td><td>${PER_LAB[a.periodo||""]}</td>
+      <td class="r">${eur(a.prezzo_gold)}</td><td class="r">${a.prezzo_eu>0?eur(a.prezzo_eu):'<span class="hint">ricarico std</span>'}</td><td class="r hint">${a.prezzo_eu>0&&a.prezzo_gold>0?n2((a.prezzo_eu/a.prezzo_gold-1)*100)+"%":""}</td></tr>`).join("")}</tbody></table></div>`
+    : `<div class="empty"><b>${M.length?"Nessun materiale trovato":"Nessun materiale"}</b>${M.length?"":"Aggiungili uno alla volta con “+ Nuovo materiale” o importa un file Excel/CSV."}</div>`;
 }
+$("#qMat").addEventListener("input", renderMiei);
+$("#qMatCat").addEventListener("change", renderMiei);
 $("#mieiList").addEventListener("click", e => { const tr=e.target.closest("tr[data-id]"); if (tr) editArticolo(S.listino.find(a=>String(a.id)===tr.dataset.id)); });
 $("#bNuovoArt").addEventListener("click", () => editArticolo(null));
-function editArticolo(a){
-  const nuovo = !a; a = a ? clone(a) : {codice:"", descrizione:"", categoria:"", periodo:"", prezzo_gold:"", prezzo_eu:""};
-  const L = openLayer(`<div class="dialog"><h2>${nuovo?"Nuovo articolo":"Articolo"}</h2><div class="grid g2">
-    <label class="f">Codice<input data-c="codice" value="${esc(a.codice)}"></label>
-    <label class="f">Categoria<input data-c="categoria" value="${esc(a.categoria)}" placeholder="Es. Networking, Servizi"></label>
+function nuovoCodiceMat(){
+  let m = 0; materiali().forEach(a => { const x = String(a.codice).match(/^MAT-(\d+)$/); if (x) m = Math.max(m, +x[1]); });
+  return "MAT-" + String(m+1).padStart(4, "0");
+}
+function editArticolo(a, base){
+  const nuovo = !a; a = a ? clone(a) : Object.assign({codice:"", descrizione:"", categoria:"", marca:"", um:"", periodo:"", prezzo_gold:"", prezzo_eu:""}, base||{});
+  const cats = [...new Set(materiali().map(x=>x.categoria).filter(Boolean))];
+  const L = openLayer(`<div class="dialog"><h2>${nuovo?"Nuovo materiale":"Materiale"}</h2><div class="grid g2">
+    <label class="f">Codice (vuoto = automatico)<input data-c="codice" value="${esc(a.codice)}"></label>
+    <label class="f">Marca<input data-c="marca" value="${esc(a.marca||"")}"></label>
     <label class="f span2">Descrizione<input data-c="descrizione" value="${esc(a.descrizione)}"></label>
+    <label class="f">Categoria<input data-c="categoria" list="dlMatCat" value="${esc(a.categoria)}" placeholder="Es. Networking, Cavi, Servizi"><datalist id="dlMatCat">${cats.map(c=>`<option value="${esc(c)}">`).join("")}</datalist></label>
+    <label class="f">Unità di misura<input data-c="um" value="${esc(a.um||"")}" placeholder="nr., mt., ore…"></label>
     <label class="f">Costo a me<input data-c="prezzo_gold" inputmode="decimal" value="${esc(inN(a.prezzo_gold))}"></label>
-    <label class="f">Prezzo al cliente<input data-c="prezzo_eu" inputmode="decimal" value="${esc(inN(a.prezzo_eu))}"></label>
+    <label class="f">Prezzo al cliente (vuoto = ricarico predefinito)<input data-c="prezzo_eu" inputmode="decimal" value="${esc(num(a.prezzo_eu)>0?inN(a.prezzo_eu):"")}"></label>
     <label class="f">Periodo<select data-c="periodo">${PERIODI.map(([p,l])=>`<option value="${p}"${(a.periodo||"")===p?" selected":""}>${l}</option>`).join("")}</select></label></div>
     <div class="foot">${nuovo?"":`<button class="btn ghost danger" data-x="del" type="button" style="margin-right:auto">Elimina</button>`}<button class="btn" data-x="no" type="button">Annulla</button><button class="btn primary" data-x="ok" type="button">Salva</button></div></div>`);
   L.addEventListener("click", async e => {
     const x = e.target.closest("[data-x]"); if (!x) return;
     if (x.dataset.x === "no") return closeLayer();
-    if (x.dataset.x === "del"){ const {error} = await S.sb.from("wx_listino").delete().eq("id", a.id); if (error) return toast(errMsg(error)); closeLayer(); await loadListino(); renderMiei(); return; }
+    if (x.dataset.x === "del"){ const {error} = await S.sb.from("wx_listino").delete().eq("id", a.id); if (error) return toast(errMsg(error)); closeLayer(); await loadListino(); renderMiei(); return toast("Materiale eliminato"); }
     const row = {}; $$("[data-c]", L).forEach(i => row[i.dataset.c] = i.value.trim());
-    if (!row.codice || !row.descrizione) return toast("Servono codice e descrizione");
+    if (!row.descrizione) return toast("Serve almeno la descrizione");
+    if (!row.codice) row.codice = nuovoCodiceMat();
     row.prezzo_gold = num(row.prezzo_gold); row.prezzo_eu = num(row.prezzo_eu);
     let res;
     if (nuovo) res = await S.sb.from("wx_listino").insert(Object.assign({versione:"Miei", listino:"PERSONALE", fascia:""}, row));
     else res = await S.sb.from("wx_listino").update(row).eq("id", a.id);
-    if (res.error) return toast(res.error.code==="23505" ? "Esiste già un articolo con questo codice" : errMsg(res.error));
-    closeLayer(); await loadListino(); renderMiei(); toast("Articolo salvato");
+    if (res.error) return toast(res.error.code==="23505" ? "Esiste già un materiale con il codice " + row.codice : errMsg(res.error));
+    closeLayer(); await loadListino(); renderMiei(); toast("Materiale salvato: " + row.codice);
   });
 }
+function loadSheetJS(){
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((res, rej) => { const s=document.createElement("script"); s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    s.onload=()=>res(window.XLSX); s.onerror=()=>rej(new Error("Libreria per i file Excel non raggiungibile")); document.head.appendChild(s); });
+}
+async function righeDaFile(file){
+  const ext = file.name.split(".").pop().toLowerCase();
+  if (ext === "xls" || ext === "xlsx"){
+    const X = await loadSheetJS(); const wb = X.read(await file.arrayBuffer(), {type:"array"});
+    return X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:false, defval:""}).map(r=>r.map(x=>String(x))).filter(r=>r.some(x=>x.trim()));
+  }
+  const buf = new Uint8Array(await file.arrayBuffer()); let t;
+  try{ t = new TextDecoder("utf-8",{fatal:true}).decode(buf); }catch(e){ t = new TextDecoder("windows-1252").decode(buf); }
+  return parseCSV(t.replace(/^﻿/,""));
+}
+$("#fMat").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  try{
+    const rows = await righeDaFile(f); if (rows.length < 2) return toast("Il file è vuoto");
+    const norm = s => String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z]/g,"");
+    const MAP = {codice:["codice","cod","codicearticolo","articolo","sku","partnumber"], descrizione:["descrizione","desc","prodotto","nome","descrizionearticolo"],
+      categoria:["categoria","cat","gruppo","famiglia"], marca:["marca","produttore","brand","fornitore"], um:["um","unita","unitadimisura","unitamisura"],
+      prezzo_gold:["costo","costoame","prezzoacquisto","acquisto","costounitario","netto"], prezzo_eu:["prezzo","prezzocliente","prezzovendita","vendita","listino"], periodo:["periodo","ricorrenza"]};
+    const head = rows[0].map(norm), idx = {};
+    for (const k in MAP){ const j = head.findIndex(h => MAP[k].includes(h)); if (j >= 0) idx[k] = j; }
+    if (idx.descrizione === undefined) return toast("Colonna 'descrizione' non trovata nella prima riga");
+    const perOf = v => { v = String(v).toLowerCase().replace(/\s/g,""); return /^(1m|mensile|mese)$/.test(v) ? "1m" : /^(1y|annuale|anno)$/.test(v) ? "1y" : /^(5y|5anni)$/.test(v) ? "5y" : ""; };
+    const esist = new Set(materiali().map(a => a.codice));
+    let seq = +(nuovoCodiceMat().slice(4)) - 1; const visti = new Set();
+    const out = rows.slice(1).map(r => {
+      const g = k => idx[k] !== undefined ? String(r[idx[k]] ?? "").trim() : "";
+      const o = {versione:"Miei", listino:"PERSONALE", fascia:"", codice:g("codice"), descrizione:g("descrizione"), categoria:g("categoria"), marca:g("marca"), um:g("um"),
+        prezzo_gold:num(g("prezzo_gold")), prezzo_eu:num(g("prezzo_eu")), periodo: perOf(g("periodo"))};
+      if (!o.codice) o.codice = "MAT-" + String(++seq).padStart(4, "0");
+      return o;
+    }).filter(o => o.descrizione && !visti.has(o.codice) && visti.add(o.codice));
+    const agg = out.filter(o => esist.has(o.codice)).length;
+    for (let i=0;i<out.length;i+=400){ const {error} = await S.sb.from("wx_listino").upsert(out.slice(i,i+400), {onConflict:"versione,listino,codice,fascia"}); if (error) throw error; }
+    await loadListino(); renderMiei(); toast(`${out.length - agg} materiali nuovi, ${agg} aggiornati`);
+  }catch(err){ toast(errMsg(err)); }
+});
+$("#bEspMat").addEventListener("click", () => {
+  const q = v => { v = String(v ?? ""); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; };
+  const righe = [["codice","descrizione","categoria","marca","um","costo","prezzo","periodo"]].concat(materiali().map(a => [a.codice, a.descrizione, a.categoria, a.marca, a.um,
+    inN(a.prezzo_gold), a.prezzo_eu>0?inN(a.prezzo_eu):"", PER_LAB[a.periodo||""]==="Una tantum"?"":PER_LAB[a.periodo||""].toLowerCase()]));
+  const blob = new Blob(["﻿" + righe.map(r => r.map(q).join(";")).join("\r\n")], {type:"text/csv;charset=utf-8"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "materiali-tcsistem.csv"; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+});
 
 /* ---------------------------------------------------------------- impostazioni */
 function renderSettings(){
@@ -669,7 +739,7 @@ function paperHtml(o){
     if (!c.filled) return "";
     const en = P.en && r.descrEn && r.descrEn !== r.descr ? `<span class="en">${esc(r.descrEn)}</span>` : "";
     const sc = haListino(r) && num(r.listino) ? (1 - c.prezzo/num(r.listino))*100 : 0;
-    return `<tr>${P.codici?`<td>${esc(r.codice)}</td>`:""}<td>${esc(r.descr).replace(/\n/g,"<br>")}${en}</td><td class="c">${n2(c.qta)}</td>
+    return `<tr>${P.codici?`<td>${esc(r.codice)}</td>`:""}<td>${esc(r.descr).replace(/\n/g,"<br>")}${en}</td><td class="c">${n2(c.qta)}${r.um?" "+esc(r.um):""}</td>
       ${P.listino?`<td class="r">${haListino(r)?fmtI.format(num(r.listino))+" €":""}</td><td class="r">${sc>0.004?n2(sc)+"%":""}</td>`:""}
       ${P.unit?`<td class="r">${fmtI.format(c.prezzo)} €</td>`:""}<td class="r">${eur(c.tot)}</td>${colPer?`<td class="c">${PER_LAB[c.p]}</td>`:""}</tr>`;
   }).join("");
@@ -776,7 +846,7 @@ async function startApp(user){
   if (bozza && bozza.righe){ S.offer = bozza; S.dirty = true; toast("Ripresa l'offerta che stavi scrivendo (non salvata)"); }
   else S.offer = newOffer();
   loadOfferIntoForm(); setStatus();
-  if (!S.listino.some(a => a.listino !== "PERSONALE")) banner2("Il database non ha ancora il listino Wildix: vai nella scheda Listini e premi “Carica listino incluso”.");
+  if (!S.listino.some(a => a.listino !== "PERSONALE")) banner2("Il database non ha ancora il listino Wildix: vai nella scheda Listini Wildix e premi “Carica listino incluso”.");
 }
 function banner(t){ const b=$("#banner"); b.textContent=t; b.hidden=false; }
 function banner2(t){ const b=$("#banner"); const p=document.createElement("div"); p.id="avvisoListino"; p.textContent=t; p.style.marginTop="4px"; b.appendChild(p); b.hidden=false; }
