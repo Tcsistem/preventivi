@@ -743,7 +743,7 @@ function paperHtml(o){
       ${P.listino?`<td class="r">${haListino(r)?fmtI.format(num(r.listino))+" €":""}</td><td class="r">${sc>0.004?n2(sc)+"%":""}</td>`:""}
       ${P.unit?`<td class="r">${fmtI.format(c.prezzo)} €</td>`:""}<td class="r">${eur(c.tot)}</td>${colPer?`<td class="c">${PER_LAB[c.p]}</td>`:""}</tr>`;
   }).join("");
-  const tot = PERIODI.filter(([p]) => k.per[p].ricavo).map(([p]) => `<tr${p===""||periodiUsati.length===1?' class="g"':""}><td>${PER_STAMPA[p]} (IVA esclusa)</td><td class="r">${eur(k.per[p].ricavo)}</td></tr>`).join("");
+  const tot = PERIODI.filter(([p]) => k.per[p].ricavo).map(([p]) => `<tr class="g"><td>${PER_STAMPA[p]} (IVA esclusa)</td><td class="r">${eur(k.per[p].ricavo)}</td></tr>`).join("");
   const c = o.condizioni, canoni = k.per["1m"].ricavo || k.per["1y"].ricavo || k.per["5y"].ricavo;
   const cond = [["Validità offerta", c.validita ? fmtDate(addDays(o.data, c.validita)) : ""], ["Pagamento", c.pagamento], ["Consegna / attivazione", c.consegna],
     canoni ? ["Durata contratto canoni", c.durata] : null, ["Garanzia", c.garanzia], ["IVA", c.iva]].filter(x => x && x[1]);

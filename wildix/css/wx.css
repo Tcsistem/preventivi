@@ -89,3 +89,8 @@ table.righe.wx input.w60{width:54px} table.righe.wx input.w80{width:74px}
 .qdett{font-size:11px;color:var(--int-ink);margin-top:4px;line-height:1.4}
 
 table.righe.wx td.in select.modo{min-width:0;width:100%;font-size:11px;padding:1px 2px;color:var(--muted);margin-top:2px}
+
+/* stampa: filetto e nome azienda arancioni (al posto del rosso) */
+.paper .ph{border-bottom-color:#f08a00}
+.paper .ph .az{color:#f08a00}
+@media print{.paper .ph{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
