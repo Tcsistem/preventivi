@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Preventivatore Wildix</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="css/wx.css">
+</head>
+<body>
+
+<!-- ============ ACCESSO ============ -->
+<div id="loginRoot" class="login" hidden>
+  <div class="dialog">
+    <h1><b>Wildix</b> Preventivi</h1>
+    <p class="hint" id="loginIntro">Accedi con la tua email.</p>
+    <form id="fLogin">
+      <label class="f">Email<input id="lEmail" type="email" autocomplete="username" required></label>
+      <label class="f">Password<input id="lPwd" type="password" autocomplete="current-password" required></label>
+      <div class="err" id="lErr" role="alert"></div>
+      <button class="btn primary" type="submit" style="justify-content:center">Accedi</button>
+      <button class="btn ghost" type="button" id="bRecupera">Password dimenticata?</button>
+    </form>
+    <form id="fNuovaPwd" hidden>
+      <label class="f">Nuova password (almeno 8 caratteri)<input id="nPwd" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label class="f">Ripeti la password<input id="nPwd2" type="password" autocomplete="new-password" minlength="8" required></label>
+      <div class="err" id="nErr" role="alert"></div>
+      <button class="btn primary" type="submit" style="justify-content:center">Salva password ed entra</button>
+    </form>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="appRoot" hidden>
+<div class="bar">
+  <div class="bar-top">
+    <div class="brand"><h1><b>Wildix</b> Preventivi</h1><small id="brandAz"></small></div>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">Caricamento…</span></div>
+    <div class="user"><span>Accesso: <b id="userName"></b></span><button class="btn sm" id="bEsci" type="button">Esci</button></div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" data-view="offerta" aria-selected="true">Offerta</button>
+    <button class="tab" role="tab" data-view="archivio" aria-selected="false">Archivio</button>
+    <button class="tab" role="tab" data-view="clienti" aria-selected="false">Clienti</button>
+    <button class="tab" role="tab" data-view="listini" aria-selected="false">Listini</button>
+    <button class="tab" role="tab" data-view="impostazioni" aria-selected="false">Impostazioni</button>
+  </nav>
+</div>
+<div class="banner" id="banner" hidden></div>
+
+<main>
+<!-- ============ OFFERTA ============ -->
+<section class="view" id="v-offerta">
+  <div class="work">
+    <div>
+      <div class="card">
+        <div class="card-h">
+          <h2>Offerta <span id="hNum" class="num"></span></h2>
+          <span class="chip" id="hStato">Bozza</span>
+          <div class="sp row">
+            <button class="btn" id="bNuova" type="button">Nuova</button>
+            <button class="btn" id="bDuplica" type="button">Duplica</button>
+          </div>
+        </div>
+        <div class="grid g4">
+          <label class="f span2">Spett.le (cliente)
+            <input id="oCliente" list="dlClienti" autocomplete="off" placeholder="Cerca in anagrafica o scrivi il nome">
+          </label>
+          <label class="f">Offerta nr.<input id="oNumero" class="num"></label>
+          <label class="f">Data<input id="oData" type="date"></label>
+          <label class="f span2">Indirizzo stampato (si compila dal cliente, modificabile)
+            <textarea id="oBlocco" rows="3"></textarea>
+          </label>
+          <label class="f">Cortese attenzione<input id="oAttenzione"></label>
+          <label class="f">Stato
+            <select id="oStato"><option>Bozza</option><option>Inviata</option><option>Accettata</option><option>Persa</option></select>
+          </label>
+          <label class="f">Redatto da<input id="oRedatto"></label>
+          <label class="f span3">Oggetto<input id="oOggetto" placeholder="Es. Centralino Wildix in cloud con 10 utenti e telefoni in noleggio"></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">
+          <h2>Aggiungi articoli</h2>
+          <span class="hint" id="lstInfo"></span>
+        </div>
+        <div class="row">
+          <input class="inp search" id="qArt" type="search" placeholder="Cerca codice o descrizione (es. UC-PREMIUM, W-AIR, DID-1-IT)" style="flex:1;max-width:none">
+          <div class="seg" role="group" aria-label="Listino" id="segLst">
+            <button type="button" data-l="" aria-pressed="true">Tutti</button>
+            <button type="button" data-l="CAPEX" aria-pressed="false">Capex</button>
+            <button type="button" data-l="OPEX" aria-pressed="false">Opex</button>
+            <button type="button" data-l="CLASSOUND" aria-pressed="false">Classound</button>
+            <button type="button" data-l="PERSONALE" aria-pressed="false">Miei</button>
+          </div>
+          <select class="inp" id="qPer" style="width:auto">
+            <option value="*">Ogni periodo</option><option value="">Una tantum</option><option value="1m">Mensile</option><option value="1y">Annuale</option><option value="5y">5 anni</option>
+          </select>
+          <select class="inp" id="qCat" style="width:auto"><option value="">Ogni categoria</option></select>
+        </div>
+        <div id="artRes" class="artres"></div>
+        <div class="row addrow">
+          <button class="btn" id="bRigaLibera" type="button">+ Riga libera (anche non Wildix)</button>
+          <button class="btn" id="bSezione" type="button">+ Titolo di sezione</button>
+          <span class="hint">Le righe libere servono per hardware di altri marchi, servizi, installazione, connettività…</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">
+          <h2>Righe dell'offerta</h2>
+          <div class="sp row">
+            <label class="mini">Sconto % su listino <input class="inp n" id="gSconto" inputmode="decimal" style="width:70px"></label>
+            <button class="btn sm" id="bApplSconto" type="button">Applica alle righe di listino</button>
+            <label class="mini">Ricarico % sul costo <input class="inp n" id="gRicarico" inputmode="decimal" style="width:70px"></label>
+            <button class="btn sm" id="bApplRic" type="button">Applica a tutte</button>
+          </div>
+        </div>
+        <div class="tablewrap">
+          <table class="righe wx" id="tRighe">
+            <thead><tr>
+              <th>#</th><th>Codice</th><th style="min-width:260px">Descrizione</th><th>Periodo</th><th class="r">Q.tà</th>
+              <th class="r int">Costo a me</th><th class="r">Listino</th><th class="r">Sc. / Ric. %</th><th class="r">Prezzo unit.</th>
+              <th class="calc r">Totale</th><th class="calc r int">Margine</th>
+            </tr></thead>
+            <tbody id="tbRighe"></tbody>
+          </table>
+        </div>
+        <p class="hint" style="margin:8px 0 0">Costo a me = prezzo Gold. Listino = prezzo End User. Sulle righe di listino la % è uno <b>sconto</b> sul listino; sulle righe senza listino è un <b>ricarico</b> sul costo. Puoi anche scrivere direttamente il prezzo. Le colonne in giallo non vanno in stampa.</p>
+      </div>
+
+      <div class="card int-card">
+        <div class="card-h">
+          <h2>Costi a me <span class="chip warn">interni · non stampati</span></h2>
+          <div class="sp row">
+            <select class="inp" id="selPreset" style="width:auto"><option value="">+ Voce rapida…</option></select>
+            <button class="btn" id="bAddCosto" type="button">+ Aggiungi costo</button>
+          </div>
+        </div>
+        <div class="tablewrap">
+          <table class="righe wx" style="min-width:640px">
+            <thead><tr><th>#</th><th style="min-width:260px">Descrizione</th><th>Periodo</th><th class="r">Q.tà</th><th class="r">Costo unit.</th><th class="calc r">Totale</th><th></th></tr></thead>
+            <tbody id="tbCosti"></tbody>
+          </table>
+        </div>
+        <p class="hint" style="margin:8px 0 0">Ore di installazione, trasferte, canoni dei fornitori (es. connettività), provvigioni: tutto quello che paghi tu e che il cliente non vede come riga. Entrano nel margine.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h2>Condizioni e stampa</h2></div>
+        <div class="grid g3">
+          <label class="f">Validità (giorni)<input id="cValidita" type="number" min="0" class="num"></label>
+          <label class="f">Pagamento<input id="cPagamento"></label>
+          <label class="f">Consegna / attivazione<input id="cConsegna"></label>
+          <label class="f">Durata contratto canoni<input id="cDurata"></label>
+          <label class="f">IVA<input id="cIva"></label>
+          <label class="f">Garanzia<input id="cGaranzia"></label>
+          <label class="f span4">Note in stampa<textarea id="cNote" rows="3"></textarea></label>
+        </div>
+        <div class="row" style="margin-top:12px;gap:18px">
+          <label class="switch"><input type="checkbox" id="pCodici"> Codici articolo</label>
+          <label class="switch"><input type="checkbox" id="pUnit"> Prezzi unitari</label>
+          <label class="switch"><input type="checkbox" id="pListino"> Prezzo di listino e sconto</label>
+          <label class="switch"><input type="checkbox" id="pEn"> Descrizioni originali (inglese) sotto</label>
+        </div>
+      </div>
+    </div>
+
+    <aside class="side">
+      <div class="card conti">
+        <h3>Quadro economico</h3>
+        <div id="quadro"></div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn primary" id="bSalva" type="button">Salva</button>
+          <button class="btn navy" id="bAnteprima" type="button">Anteprima / PDF</button>
+          <button class="btn" id="bInterno" type="button">Stampa costi interni</button>
+        </div>
+        <div class="hint" id="saveHint" style="margin-top:8px"></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ ARCHIVIO ============ -->
+<section class="view" id="v-archivio" hidden>
+  <div class="card">
+    <div class="card-h"><h2>Archivio offerte</h2>
+      <input class="inp search sp" id="qArch" type="search" placeholder="Cerca numero, cliente, oggetto">
+    </div>
+    <div id="archList"></div>
+  </div>
+</section>
+
+<!-- ============ CLIENTI ============ -->
+<section class="view" id="v-clienti" hidden>
+  <div class="card">
+    <div class="card-h"><h2>Clienti</h2>
+      <div class="sp row">
+        <input class="inp search" id="qCli" type="search" placeholder="Cerca nome, città, P.IVA">
+        <button class="btn" id="bNuovoCli" type="button">+ Nuovo</button>
+        <label class="btn" style="cursor:pointer">Importa CSV<input type="file" id="fCsv" accept=".csv,text/csv" hidden></label>
+      </div>
+    </div>
+    <div id="cliList"></div>
+    <p class="hint">CSV con intestazioni (separatore ; o ,): ragione sociale, indirizzo, cap, città, provincia, partita iva, email, pec, sdi, telefono, referente.</p>
+  </div>
+</section>
+
+<!-- ============ LISTINI ============ -->
+<section class="view" id="v-listini" hidden>
+  <div class="card">
+    <div class="card-h"><h2>Listini Wildix</h2></div>
+    <div id="verList"></div>
+    <div class="row" style="margin-top:12px">
+      <label class="f" style="min-width:240px">Versione in uso per le righe nuove
+        <select id="selVersione"></select>
+      </label>
+    </div>
+    <div class="sec-t">Carica un listino nel database</div>
+    <div id="inclusi" class="row"></div>
+    <div class="row" style="margin-top:8px">
+      <label class="btn" style="cursor:pointer">Importa file listino (.json)<input type="file" id="fListino" accept=".json,application/json" hidden></label>
+      <span class="hint">Il file .json si ottiene dai PDF Wildix con <code>wildix/tools/listino_pdf.py</code> (vedi README).</span>
+    </div>
+    <div class="hint" id="impHint" style="margin-top:6px"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h2>Articoli miei</h2>
+      <span class="hint">Prodotti e servizi non Wildix con il tuo costo e il tuo prezzo: li trovi nella ricerca sotto “Miei”.</span>
+      <button class="btn sp" id="bNuovoArt" type="button">+ Nuovo articolo</button>
+    </div>
+    <div id="mieiList"></div>
+  </div>
+</section>
+
+<!-- ============ IMPOSTAZIONI ============ -->
+<section class="view" id="v-impostazioni" hidden>
+  <div class="card">
+    <div class="card-h"><h2>Intestazione in stampa</h2></div>
+    <div class="grid g2">
+      <label class="f">Ragione sociale<input id="sAzNome"></label>
+      <label class="f">Telefono / contatti per l'offerta<input id="sAzTel"></label>
+      <label class="f span2">Dettagli (indirizzo, P.IVA, contatti — una riga per voce)<textarea id="sAzDet" rows="4"></textarea></label>
+      <label class="f">Logo (PNG/JPG, facoltativo)<input type="file" id="sLogo" accept="image/*"></label>
+      <div class="row"><img id="sLogoPrev" alt="" style="max-height:48px" hidden><button class="btn sm ghost danger" id="bLogoVia" type="button" hidden>Togli logo</button></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-h"><h2>Valori predefiniti per le offerte nuove</h2></div>
+    <div class="grid g4">
+      <label class="f">Sconto % su listino End User<input id="sSconto" class="num" inputmode="decimal"></label>
+      <label class="f">Ricarico % righe libere<input id="sRicarico" class="num" inputmode="decimal"></label>
+      <label class="f">Validità (giorni)<input id="sValidita" type="number" class="num"></label>
+      <label class="f">IVA<input id="sIva"></label>
+      <label class="f span2">Pagamento<input id="sPagamento"></label>
+      <label class="f">Consegna / attivazione<input id="sConsegna"></label>
+      <label class="f">Durata contratto canoni<input id="sDurata"></label>
+      <label class="f">Garanzia<input id="sGaranzia"></label>
+      <label class="f span4">Note standard in stampa<textarea id="sNote" rows="3"></textarea></label>
+      <label class="f span4">Voci rapide dei costi interni (una per riga: descrizione ; costo ; periodo vuoto/1m/1y)
+        <textarea id="sPreset" rows="5" placeholder="Ore tecnico installazione ; 30 ;&#10;Trasferta ; 50 ;&#10;Connettività FTTH fornitore ; 25 ; 1m"></textarea></label>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn primary" id="bSalvaSet" type="button">Salva impostazioni</button>
+      <span class="hint" id="setHint"></span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-h"><h2>Il mio nome</h2></div>
+    <div class="row"><input class="inp" id="sMioNome" style="max-width:280px"><button class="btn" id="bMioNome" type="button">Salva</button><span class="hint">Compare in “Redatto da”.</span></div>
+  </div>
+</section>
+</main>
+</div>
+
+<div id="layer"></div>
+<datalist id="dlClienti"></datalist>
+<div id="printArea"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/prova.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

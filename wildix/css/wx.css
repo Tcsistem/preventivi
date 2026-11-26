@@ -1,0 +1,74 @@
+/* Preventivatore Wildix: aggiunte allo stile comune ../css/app.css */
+:root{--int:#fff6db;--int-ink:#7a5400}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--int:#2a2312;--int-ink:#f0c766}}
+.brand small{margin-left:4px}
+.mini{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:600}
+.inp{border:1px solid var(--line);background:var(--input);border-radius:6px;padding:7px 9px;font-size:14px;color:var(--ink)}
+.inp.n{text-align:right;font-variant-numeric:tabular-nums}
+.sec-t{font-family:var(--f-head);text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin:18px 0 8px;color:var(--muted)}
+
+/* risultati ricerca articoli */
+.artres{margin-top:10px;max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.artres:empty{display:none}
+.art{display:grid;grid-template-columns:minmax(150px,220px) minmax(0,1fr) auto auto auto;gap:4px 12px;align-items:center;padding:7px 10px;border-top:1px solid var(--line)}
+.art:first-child{border-top:0}
+.art:hover{background:var(--surface-2)}
+.art .cod{font-weight:700;font-variant-numeric:tabular-nums;word-break:break-all}
+.art .des{font-size:13px}
+.art .des small{display:block;color:var(--muted);font-size:11px}
+.art .pz{text-align:right;font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.art .pz b{display:block;font-size:13px;color:var(--ink)}
+.art .pz.g{color:var(--int-ink)}
+.art .more{padding:10px;text-align:center;color:var(--muted)}
+.tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.05em;border-radius:4px;padding:1px 5px;margin-right:4px;background:var(--navy-soft);color:var(--navy);vertical-align:1px}
+.tag.OPEX{background:var(--good-soft);color:var(--good)}
+.tag.CLASSOUND{background:var(--warn-soft);color:var(--warn)}
+.tag.PERSONALE{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+.tag.LIBERA{background:var(--surface-2);color:var(--muted);border:1px dashed var(--line)}
+@media (max-width:700px){.art{grid-template-columns:1fr auto}.art .des{grid-column:1/-1}}
+
+/* righe */
+table.righe.wx{min-width:980px}
+table.righe.wx td.in input,table.righe.wx td.in textarea,table.righe.wx td.in select{font-size:13px}
+table.righe.wx td.in textarea{height:auto;min-height:44px;min-width:180px}
+table.righe.wx td.in select{min-width:104px}
+table.righe.wx td.c{white-space:nowrap;font-size:13px}
+table.righe.wx th{font-size:12px;padding:7px 5px}
+table.righe.wx td.idx{padding-top:6px;width:30px}
+.acts{display:flex;flex-direction:column;align-items:center;margin-top:2px}
+.acts .btn{padding:0 5px!important;line-height:1.25;font-size:11px}
+.work{grid-template-columns:minmax(0,1fr) 290px}
+.side .big{grid-template-columns:1fr}
+.side .big .val{font-size:22px}
+.qt td,.qt th{padding:4px 3px}
+@media (max-width:1100px){.work{grid-template-columns:minmax(0,1fr)}}
+table.righe.wx th.int{background:#b88a10;color:#fff}
+table.righe.wx td.int,table.righe.wx tr:nth-child(even) td.int{background:var(--int)}
+table.righe.wx td.int input{color:var(--int-ink)}
+table.righe.wx td.c.int{color:var(--int-ink)}
+table.righe.wx td.cod{font-size:12px;font-weight:600;padding-top:9px;width:112px;max-width:130px;word-break:break-word}
+table.righe.wx td.cod small{display:block;font-weight:400;color:var(--muted)}
+table.righe.wx td.in select{padding:5px 2px}
+table.righe.wx tr.sez td{background:var(--navy-soft)!important}
+table.righe.wx tr.sez input{font-weight:700;font-family:var(--f-head);text-transform:uppercase;letter-spacing:.04em;font-size:15px}
+table.righe.wx input.w60{width:54px} table.righe.wx input.w80{width:74px}
+.neg{color:var(--accent)!important}
+.fascia{display:inline-block;font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-top:2px}
+.int-card{border-color:#e0c46a}
+
+/* quadro */
+.qt{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.qt th{font-family:var(--f-head);text-transform:uppercase;font-size:11px;letter-spacing:.05em;color:var(--muted);text-align:right;padding:3px 4px;font-weight:600}
+.qt th:first-child,.qt td:first-child{text-align:left}
+.qt td{padding:4px;text-align:right;border-top:1px solid var(--line)}
+.qt td.m{color:var(--good);font-weight:600}
+.qt tr.tot td{font-weight:700;border-top:2px solid var(--line)}
+
+/* foglio stampa */
+.paper .logo{max-height:56px;max-width:220px}
+.paper table.pr td .en{display:block;color:#666;font-size:10px}
+.paper table.pr tr.sez td{background:#eef3f9;font-weight:700;font-family:var(--f-head);text-transform:uppercase;letter-spacing:.05em;font-size:12px}
+.paper .note{margin-top:12px;white-space:pre-line;font-size:11.5px}
+.paper .interno{background:#fff3c4;border:1px solid #c9a227;text-align:center;font-weight:700;letter-spacing:.1em;padding:4px;margin:10px 0;font-family:var(--f-head)}
+.paper table.pr td.g{background:#fffbea}
+@media print{.paper table.pr tr.sez td,.paper .interno,.paper table.pr td.g{-webkit-print-color-adjust:exact;print-color-adjust:exact}}

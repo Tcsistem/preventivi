@@ -1,0 +1,768 @@
+(function(){
+"use strict";
+const CFG = window.WX_CONFIG || {};
+const LISTINI_INCLUSI = [{versione:"Novembre 2026", file:"data/listino-2026-11.json"}];
+const PERIODI = [["","Una tantum"],["1m","Mensile"],["1y","Annuale"],["5y","5 anni"]];
+const PER_LAB = Object.fromEntries(PERIODI);
+const PER_ANNO1 = {"":1,"1m":12,"1y":1,"5y":1};
+const PER_STAMPA = {"":"Totale una tantum","1m":"Canone mensile","1y":"Canone annuale","5y":"Canone 5 anni (anticipato)"};
+const DEFAULT_SET = {
+  azienda:{nome:"TC SISTEM S.N.C.", tel:"", logo:"", dettagli:"Indirizzo – CAP Città (LT)\nP.IVA 00000000000\namministrazione@tcsistem.it"},
+  sconto:0, ricarico:30, versione:"",
+  cond:{validita:30, pagamento:"Bonifico bancario 30 gg d.f.", consegna:"Da concordare", durata:"36 mesi per i servizi a canone",
+        iva:"Esclusa (aliquota di legge)", garanzia:"Secondo le condizioni del produttore", note:""},
+  preset:[{descr:"Ore tecnico installazione e configurazione", costo:30, periodo:""},{descr:"Trasferta", costo:50, periodo:""},{descr:"Connettività fornitore", costo:25, periodo:"1m"}]
+};
+
+/* ---------------------------------------------------------------- utilità */
+const $ = (s, el=document) => el.querySelector(s);
+const $$ = (s, el=document) => Array.from(el.querySelectorAll(s));
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const num = v => { if (v === null || v === undefined || v === "") return 0; if (typeof v === "number") return isFinite(v)?v:0;
+  const s = String(v).trim().replace(/\s|€/g,""); const n = parseFloat(s.includes(",") ? s.replace(/\./g,"").replace(",",".") : s); return isFinite(n) ? n : 0; };
+const r2 = v => Math.round((v + Number.EPSILON) * 100) / 100;
+const fmtE = new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",useGrouping:"always"});
+const fmtN = new Intl.NumberFormat("it-IT",{maximumFractionDigits:2,useGrouping:"always"});
+const fmtI = new Intl.NumberFormat("it-IT",{minimumFractionDigits:2, maximumFractionDigits:4,useGrouping:"always"});
+const eur = v => fmtE.format(v||0);
+const n2 = v => fmtN.format(v||0);
+const inN = v => (v === "" || v === null || v === undefined) ? "" : String(v).replace(".", ",");
+const today = () => new Date().toISOString().slice(0,10);
+const uid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => { const r=Math.random()*16|0; return (c==="x"?r:(r&3|8)).toString(16); });
+const clone = o => JSON.parse(JSON.stringify(o));
+const fmtDate = iso => { if(!iso) return ""; const [y,m,d]=String(iso).slice(0,10).split("-"); return `${d}/${m}/${y}`; };
+const addDays = (iso,n) => { const d=new Date(iso+"T12:00:00"); d.setDate(d.getDate()+(+n||0)); return d.toISOString().slice(0,10); };
+function lsGet(k,def){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):def; }catch(e){ return def; } }
+function lsSet(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function toast(msg){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2800); }
+function errMsg(e){
+  if (!e) return "Errore sconosciuto";
+  if (e.code === "42501" || /permission|row-level/i.test(e.message||"")) return "Permesso negato: il tuo utente non è abilitato (tabella wx_utenti).";
+  if (e.code === "42P01" || /does not exist|schema cache/i.test(e.message||"")) return "Tabelle mancanti: esegui wildix/supabase/schema.sql nel progetto Supabase.";
+  if (/fetch|network/i.test(e.message||"")) return "Connessione assente: riprova.";
+  return e.message || String(e);
+}
+function deepMerge(base, over){ const o = clone(base); for (const k in (over||{})){ if (over[k] && typeof over[k]==="object" && !Array.isArray(over[k]) && o[k] && typeof o[k]==="object" && !Array.isArray(o[k])) o[k] = deepMerge(o[k], over[k]); else if (over[k] !== undefined && over[k] !== null) o[k] = over[k]; } return o; }
+
+/* ---------------------------------------------------------------- stato */
+const S = {
+  sb:null, user:null, profilo:null, prova:false,
+  settings: clone(DEFAULT_SET),
+  clienti:[], offerte:[], utenti:{},
+  listino:[], byCode:new Map(), versioni:[],
+  offer:null, dirty:false, saving:false,
+  filtro:{l:"", per:"*", cat:"", q:""}
+};
+const draftKey = () => "wx-prev-bozza-" + (S.user ? S.user.id : "");
+
+/* ---------------------------------------------------------------- listino in memoria */
+function indicizza(){
+  S.byCode = new Map();
+  S.listino.forEach(a => { const k = a.listino+"|"+a.codice; if (!S.byCode.has(k)) S.byCode.set(k, []); S.byCode.get(k).push(a); });
+  S.byCode.forEach(arr => arr.sort((a,b)=>(a.q_min??0)-(b.q_min??0)));
+  const cats = [...new Set(S.listino.map(a=>a.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  $("#qCat").innerHTML = `<option value="">Ogni categoria</option>` + cats.map(c=>`<option>${esc(c)}</option>`).join("");
+  const n = S.listino.filter(a=>a.listino!=="PERSONALE").length;
+  $("#lstInfo").textContent = n ? `Listino in uso: ${S.settings.versione || "—"} (${n} righe)` : "Nessun listino nel database: aprilo dalla scheda Listini.";
+}
+function fasciaPer(fonte, codice, qta){
+  const arr = S.byCode.get(fonte+"|"+codice); if (!arr || !arr.length) return null;
+  const q = Math.max(1, qta||1);
+  const conFasce = arr.filter(a => a.q_min !== null && a.q_min !== undefined);
+  if (!conFasce.length) return arr[0];
+  return conFasce.find(a => q >= a.q_min && (a.q_max === null || a.q_max === undefined || q <= a.q_max))
+      || (q < conFasce[0].q_min ? conFasce[0] : conFasce[conFasce.length-1]);
+}
+async function loadListino(){
+  const ver = S.settings.versione;
+  const all = [];
+  for (const [col,val] of [["versione", ver], ["listino","PERSONALE"]]){
+    if (!val) continue;
+    for (let from=0; ; from+=1000){
+      const {data, error} = await S.sb.from("wx_listino").select("*").eq(col, val).order("id").range(from, from+999);
+      if (error){ toast(errMsg(error)); break; }
+      all.push(...data.filter(a => col==="listino" || a.listino!=="PERSONALE"));
+      if (data.length < 1000) break;
+    }
+  }
+  all.forEach(a => { ["prezzo_gold","prezzo_eu","ppm_gold","ppm_eu"].forEach(k => a[k] = a[k]===null||a[k]===undefined ? null : +a[k]); });
+  S.listino = all; indicizza(); cerca();
+  const avviso = $("#avvisoListino"); if (avviso && all.some(a => a.listino !== "PERSONALE")) avviso.remove();
+}
+async function loadVersioni(){
+  const {data, error} = await S.sb.rpc("wx_versioni_listino");
+  S.versioni = error ? [] : (data||[]);
+  const vers = [...new Set(S.versioni.filter(v=>v.listino!=="PERSONALE").map(v=>v.versione))];
+  if (!S.settings.versione || !vers.includes(S.settings.versione)) S.settings.versione = vers[0] || "";
+  return vers;
+}
+
+/* ---------------------------------------------------------------- ricerca articoli */
+function cerca(){
+  const F = S.filtro, box = $("#artRes");
+  const words = F.q.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length && !F.l && !F.cat && F.per==="*"){ box.innerHTML = ""; return; }
+  const seen = new Set(), out = [];
+  for (const a of S.listino){
+    if (F.l && a.listino !== F.l) continue;
+    if (F.per !== "*" && (a.periodo||"") !== F.per) continue;
+    if (F.cat && a.categoria !== F.cat) continue;
+    const k = a.listino+"|"+a.codice; if (seen.has(k)) continue;
+    const hay = (a.codice+" "+a.descrizione+" "+a.categoria+" "+(a.listino==="CLASSOUND"?a.fascia:"")).toLowerCase();
+    if (!words.every(w => hay.includes(w))) continue;
+    seen.add(k); out.push(a); if (out.length > 80) break;
+  }
+  if (!out.length){ box.innerHTML = `<div class="empty"><b>Nessun articolo</b>${S.listino.length ? "Prova con un'altra parola o togli i filtri." : "Carica un listino dalla scheda Listini."}</div>`; return; }
+  box.innerHTML = out.slice(0,80).map(a => {
+    const arr = S.byCode.get(a.listino+"|"+a.codice) || [a]; const first = arr[0];
+    const fasce = arr.length > 1 ? `${arr.length} fasce di quantità · ` : "";
+    const per = PER_LAB[a.periodo||""];
+    return `<div class="art"><div class="cod"><span class="tag ${a.listino}">${a.listino==="PERSONALE"?"MIEI":esc(a.listino)}</span>${esc(a.codice)}</div>
+      <div class="des">${esc(a.descrizione)}<small>${esc(a.categoria)} · ${per}${a.listino==="CLASSOUND"&&a.fascia?" · "+esc(a.fascia):""} · ${fasce}${arr.length>1?"prezzi della prima fascia ("+esc(first.fascia)+")":""}</small></div>
+      <div class="pz g">Costo<b>${eur(first.prezzo_gold)}</b></div><div class="pz">Listino<b>${eur(first.prezzo_eu)}</b></div>
+      <button class="btn sm" type="button" data-add="${esc(k_(a))}">+ Aggiungi</button></div>`;
+  }).join("") + (out.length > 80 ? `<div class="more">Altri risultati: scrivi qualche parola in più.</div>` : "");
+}
+const k_ = a => a.listino+"|"+a.codice;
+$("#qArt").addEventListener("input", e => { S.filtro.q = e.target.value; cerca(); });
+$("#qPer").addEventListener("change", e => { S.filtro.per = e.target.value; cerca(); });
+$("#qCat").addEventListener("change", e => { S.filtro.cat = e.target.value; cerca(); });
+$("#segLst").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; S.filtro.l = b.dataset.l;
+  $$("#segLst button").forEach(x => x.setAttribute("aria-pressed", String(x===b))); cerca(); });
+$("#artRes").addEventListener("click", e => {
+  const b = e.target.closest("[data-add]"); if (!b) return;
+  const [fonte, ...rest] = b.dataset.add.split("|"); const codice = rest.join("|");
+  const a = fasciaPer(fonte, codice, 1); if (!a) return;
+  const sc = num(S.offer.parametri.sconto);
+  const r = {id:uid(), tipo:"art", fonte, codice, descr:a.descrizione, descrEn:a.descrizione, categoria:a.categoria,
+    periodo:a.periodo||"", qta:1, costo:a.prezzo_gold, listino:a.prezzo_eu, perc: fonte==="PERSONALE" ? 0 : sc, prezzo:0, fascia:a.fascia||"", auto:true};
+  ricalcolaPrezzo(r);
+  if (fonte !== "PERSONALE") S.offer.versione = S.settings.versione;
+  S.offer.righe.push(r); renderRighe(); update(); markDirty();
+  toast("Aggiunto: " + codice);
+});
+
+/* ---------------------------------------------------------------- offerta: modello e calcoli */
+function nextNumero(){
+  const y = new Date().getFullYear(); let max = 0;
+  S.offerte.forEach(o => { const m = String(o.numero||"").match(/^W(\d{4})\/(\d+)$/); if (m && +m[1]===y) max = Math.max(max, +m[2]); });
+  return `W${y}/${String(max+1).padStart(3,"0")}`;
+}
+function newOffer(){
+  const s = S.settings;
+  return { id:uid(), numero:nextNumero(), data:today(), stato:"Bozza", clienteId:"", cliente:"", clienteBlocco:"", attenzione:"",
+    redatto:(S.profilo && S.profilo.nome) || "", oggetto:"", versione:s.versione,
+    parametri:{sconto:s.sconto, ricarico:s.ricarico, codici:true, unit:true, listino:false, en:false},
+    righe:[], costi:[], condizioni:clone(s.cond), isNew:true, updatedAt:null };
+}
+const haListino = r => num(r.listino) > 0;
+function ricalcolaPrezzo(r){
+  if (r.tipo === "sez") return;
+  const p = num(r.perc);
+  r.prezzo = haListino(r) ? r2(num(r.listino) * (1 - p/100)) : r2(num(r.costo) * (1 + p/100));
+}
+function ricalcolaPerc(r){
+  const pz = num(r.prezzo);
+  if (haListino(r)) r.perc = r2((1 - pz/num(r.listino)) * 100);
+  else if (num(r.costo) > 0) r.perc = r2((pz/num(r.costo) - 1) * 100);
+  else r.perc = "";
+}
+function calc(o){
+  const per = {}; PERIODI.forEach(([p]) => per[p] = {ricavo:0, costo:0, interni:0});
+  const rows = o.righe.map(r => {
+    if (r.tipo === "sez") return {sez:true};
+    const qta = num(r.qta), costo = num(r.costo), prezzo = num(r.prezzo), p = r.periodo||"";
+    const tot = prezzo*qta, cTot = costo*qta;
+    per[p].ricavo += tot; per[p].costo += cTot;
+    return {qta, costo, prezzo, tot, cTot, marg: tot-cTot, p, filled: !!(String(r.descr||"").trim() || qta || tot)};
+  });
+  const costi = o.costi.map(c => { const t = num(c.qta) * num(c.costo); per[c.periodo||""].interni += t; return t; });
+  let ricavo1 = 0, costo1 = 0;
+  PERIODI.forEach(([p]) => { const g = per[p]; g.costoTot = g.costo + g.interni; g.marg = g.ricavo - g.costoTot;
+    ricavo1 += g.ricavo * PER_ANNO1[p]; costo1 += g.costoTot * PER_ANNO1[p]; });
+  return {rows, costi, per, ricavo1, costo1, marg1: ricavo1-costo1, perc1: ricavo1 ? (ricavo1-costo1)/ricavo1*100 : 0};
+}
+
+/* ---------------------------------------------------------------- viste */
+function show(view){
+  $$(".tab").forEach(t => t.setAttribute("aria-selected", String(t.dataset.view===view)));
+  $$(".view").forEach(v => v.hidden = v.id !== "v-"+view);
+  if (view==="archivio") renderArchivio();
+  if (view==="clienti") renderClienti();
+  if (view==="listini") renderListini();
+  if (view==="impostazioni") renderSettings();
+  window.scrollTo(0,0);
+}
+$$(".tab").forEach(t => t.addEventListener("click", () => show(t.dataset.view)));
+function setStatus(){
+  $("#dot").className = "dot " + (S.dirty ? "dirty" : "ok");
+  $("#statusText").textContent = S.saving ? "Salvataggio…" : S.dirty ? "Modifiche non salvate" : (S.offer && S.offer.isNew ? "Offerta nuova, non ancora salvata" : "Tutto salvato");
+}
+function markDirty(){ S.dirty = true; lsSet(draftKey(), S.offer); setStatus(); $("#saveHint").textContent = ""; }
+
+/* ---------------------------------------------------------------- editor: testata e condizioni */
+function bloccoCliente(c){
+  return [c.rs, c.ind, [c.cap, c.citta, c.prov ? "("+c.prov+")" : ""].filter(Boolean).join(" "), c.piva ? "P.IVA " + c.piva : ""].filter(Boolean).join("\n");
+}
+const HDR = {oNumero:"numero", oData:"data", oAttenzione:"attenzione", oStato:"stato", oRedatto:"redatto", oOggetto:"oggetto", oBlocco:"clienteBlocco"};
+const COND = {cValidita:"validita", cPagamento:"pagamento", cConsegna:"consegna", cDurata:"durata", cIva:"iva", cGaranzia:"garanzia", cNote:"note"};
+const PSTAMPA = {pCodici:"codici", pUnit:"unit", pListino:"listino", pEn:"en"};
+function loadOfferIntoForm(){
+  const o = S.offer;
+  $("#hNum").textContent = o.numero; chipStato();
+  $("#oCliente").value = o.cliente;
+  for (const id in HDR) $("#"+id).value = o[HDR[id]] ?? "";
+  for (const id in COND) $("#"+id).value = o.condizioni[COND[id]] ?? "";
+  for (const id in PSTAMPA) $("#"+id).checked = !!o.parametri[PSTAMPA[id]];
+  $("#gSconto").value = inN(o.parametri.sconto); $("#gRicarico").value = inN(o.parametri.ricarico);
+  renderRighe(); renderCosti(); update();
+}
+function chipStato(){ const s=S.offer.stato, c=$("#hStato"); c.textContent=s; c.className="chip "+(s==="Accettata"?"good":s==="Inviata"?"navy":s==="Persa"?"red":""); }
+for (const id in HDR) $("#"+id).addEventListener("input", e => { S.offer[HDR[id]] = e.target.value; if (id==="oNumero") $("#hNum").textContent = e.target.value; if (id==="oStato") chipStato(); markDirty(); });
+for (const id in COND) $("#"+id).addEventListener("input", e => { S.offer.condizioni[COND[id]] = e.target.value; markDirty(); });
+for (const id in PSTAMPA) $("#"+id).addEventListener("change", e => { S.offer.parametri[PSTAMPA[id]] = e.target.checked; markDirty(); });
+$("#oCliente").addEventListener("input", e => {
+  const v = e.target.value; S.offer.cliente = v;
+  const c = S.clienti.find(x => x.rs.toLowerCase() === v.trim().toLowerCase());
+  if (c){ S.offer.clienteId = c.id; S.offer.clienteBlocco = bloccoCliente(c); if (c.ref && !S.offer.attenzione){ S.offer.attenzione = c.ref; $("#oAttenzione").value = c.ref; } $("#oBlocco").value = S.offer.clienteBlocco; }
+  else { S.offer.clienteId = ""; if (!S.offer.clienteBlocco || S.offer.clienteBlocco.split("\n").length===1){ S.offer.clienteBlocco = v; $("#oBlocco").value = v; } }
+  markDirty();
+});
+function fillDatalists(){
+  $("#dlClienti").innerHTML = S.clienti.slice(0,3000).map(c=>`<option value="${esc(c.rs)}">${esc([c.citta,c.piva].filter(Boolean).join(" · "))}</option>`).join("");
+  $("#selPreset").innerHTML = `<option value="">+ Voce rapida…</option>` + (S.settings.preset||[]).map((p,i)=>`<option value="${i}">${esc(p.descr)} (${eur(p.costo)}${p.periodo?" "+PER_LAB[p.periodo].toLowerCase():""})</option>`).join("");
+  $("#brandAz").textContent = S.settings.azienda.nome || "";
+}
+
+/* ---------------------------------------------------------------- editor: righe */
+const perSel = (v, k="periodo") => `<select data-k="${k}">${PERIODI.map(([p,l])=>`<option value="${p}"${(v||"")===p?" selected":""}>${l}</option>`).join("")}</select>`;
+function rigaHtml(r, i){
+  const act = `<div class="acts"><button class="btn sm ghost" data-a="su" title="Sposta su" type="button">↑</button><button class="btn sm ghost" data-a="giu" title="Sposta giù" type="button">↓</button><button class="btn sm ghost danger" data-a="via" title="Elimina riga" type="button">✕</button></div>`;
+  if (r.tipo === "sez") return `<tr class="sez" data-i="${i}"><td class="idx">§${act}</td><td class="in" colspan="10"><input data-k="descr" value="${esc(r.descr)}" placeholder="Titolo di sezione (es. Telefoni e accessori)"></td></tr>`;
+  const tiers = r.tipo==="art" ? (S.byCode.get(r.fonte+"|"+r.codice)||[]).length : 0;
+  const cod = r.tipo === "art"
+    ? `<td class="cod"><span class="tag ${esc(r.fonte)}">${r.fonte==="PERSONALE"?"MIEI":esc(r.fonte)}</span>${esc(r.codice)}${r.fascia ? `<br><span class="fascia" title="${tiers>1?"Fascia scelta in automatico dalla quantità":""}">${r.fonte==="CLASSOUND"?"":"fascia "}${esc(r.fascia)}</span>` : ""}</td>`
+    : `<td class="in"><input data-k="codice" value="${esc(r.codice)}" placeholder="Codice" style="min-width:90px"><span class="tag LIBERA">LIBERA</span></td>`;
+  return `<tr data-i="${i}"><td class="idx">${i+1}${act}</td>${cod}
+    <td class="in"><textarea data-k="descr" rows="2">${esc(r.descr)}</textarea></td>
+    <td class="in">${perSel(r.periodo)}</td>
+    <td class="in"><input class="n w60" data-k="qta" inputmode="decimal" value="${esc(inN(r.qta))}"></td>
+    <td class="in int"><input class="n w80" data-k="costo" inputmode="decimal" value="${esc(inN(r.costo))}"></td>
+    <td class="in"><input class="n w80" data-k="listino" inputmode="decimal" value="${esc(inN(r.listino))}" placeholder="—"></td>
+    <td class="in"><input class="n w60" data-k="perc" inputmode="decimal" value="${esc(inN(r.perc))}" title="${haListino(r)?"Sconto % sul listino":"Ricarico % sul costo"}"><div class="hint" data-o="pl" style="text-align:right">${haListino(r)?"sconto":"ricarico"}</div></td>
+    <td class="in"><input class="n w80" data-k="prezzo" inputmode="decimal" value="${esc(inN(r.prezzo))}"></td>
+    <td class="c tot" data-o="tot"></td><td class="c int" data-o="marg"></td></tr>`;
+}
+function renderRighe(){
+  const tb = $("#tbRighe");
+  tb.innerHTML = S.offer.righe.length ? S.offer.righe.map(rigaHtml).join("") : `<tr><td colspan="11"><div class="empty"><b>Nessuna riga</b>Cerca un articolo qui sopra e premi “+ Aggiungi”, oppure aggiungi una riga libera.</div></td></tr>`;
+}
+function aggiornaCelle(){
+  const k = calc(S.offer);
+  $$("#tbRighe tr[data-i]").forEach(tr => {
+    const i = +tr.dataset.i, c = k.rows[i]; if (!c || c.sez) return;
+    const t = $('[data-o="tot"]', tr), m = $('[data-o="marg"]', tr);
+    t.textContent = eur(c.tot); m.textContent = eur(c.marg); m.classList.toggle("neg", c.marg < 0);
+  });
+  $$("#tbCosti tr[data-i]").forEach(tr => { const i = +tr.dataset.i; $('[data-o="tot"]', tr).textContent = eur(k.costi[i]); });
+  return k;
+}
+function setInput(tr, key, val){ const el = $(`[data-k="${key}"]`, tr); if (el && el !== document.activeElement) el.value = inN(val); }
+$("#tbRighe").addEventListener("input", e => {
+  const tr = e.target.closest("tr[data-i]"); if (!tr) return;
+  const r = S.offer.righe[+tr.dataset.i], key = e.target.dataset.k; if (!key) return;
+  r[key] = e.target.value;
+  if (key === "qta" && r.tipo === "art" && r.auto){
+    const a = fasciaPer(r.fonte, r.codice, num(r.qta));
+    if (a && (a.fascia||"") !== (r.fascia||"")){
+      r.fascia = a.fascia||""; r.costo = a.prezzo_gold; r.listino = a.prezzo_eu; ricalcolaPrezzo(r);
+      setInput(tr,"costo",r.costo); setInput(tr,"listino",r.listino); setInput(tr,"prezzo",r.prezzo);
+      const f = $(".fascia", tr); if (f) f.textContent = "fascia " + r.fascia;
+    }
+  }
+  if (key === "costo" || key === "listino") r.auto = false;           // prezzi toccati a mano: niente più cambio fascia automatico
+  if (key === "perc" || key === "listino" || (key === "costo" && !haListino(r))){ ricalcolaPrezzo(r); setInput(tr,"prezzo",r.prezzo); }
+  if (key === "prezzo"){ ricalcolaPerc(r); setInput(tr,"perc",r.perc); }
+  const pl = $('[data-o="pl"]', tr); if (pl) pl.textContent = haListino(r) ? "sconto" : "ricarico";
+  update(); markDirty();
+});
+$("#tbRighe").addEventListener("change", e => { if (e.target.tagName === "SELECT"){ const tr=e.target.closest("tr[data-i]"); S.offer.righe[+tr.dataset.i].periodo = e.target.value; update(); markDirty(); } });
+$("#tbRighe").addEventListener("click", e => {
+  const b = e.target.closest("[data-a]"); if (!b) return;
+  const i = +b.closest("tr").dataset.i, R = S.offer.righe;
+  if (b.dataset.a === "via") R.splice(i,1);
+  if (b.dataset.a === "su" && i > 0) [R[i-1], R[i]] = [R[i], R[i-1]];
+  if (b.dataset.a === "giu" && i < R.length-1) [R[i+1], R[i]] = [R[i], R[i+1]];
+  renderRighe(); update(); markDirty();
+});
+$("#bRigaLibera").addEventListener("click", () => {
+  const r = {id:uid(), tipo:"libera", fonte:"", codice:"", descr:"", periodo:"", qta:1, costo:"", listino:"", perc:num(S.offer.parametri.ricarico), prezzo:""};
+  S.offer.righe.push(r); renderRighe(); update(); markDirty();
+  const tr = $(`#tbRighe tr[data-i="${S.offer.righe.length-1}"]`); tr && $('[data-k="descr"]', tr).focus();
+});
+$("#bSezione").addEventListener("click", () => { S.offer.righe.push({id:uid(), tipo:"sez", descr:""}); renderRighe(); markDirty();
+  const tr = $(`#tbRighe tr[data-i="${S.offer.righe.length-1}"]`); tr && $("input", tr).focus(); });
+$("#gSconto").addEventListener("input", e => { S.offer.parametri.sconto = num(e.target.value); markDirty(); });
+$("#gRicarico").addEventListener("input", e => { S.offer.parametri.ricarico = num(e.target.value); markDirty(); });
+$("#bApplSconto").addEventListener("click", () => {
+  const sc = num($("#gSconto").value); let n = 0;
+  S.offer.righe.forEach(r => { if (r.tipo !== "sez" && haListino(r) && r.fonte !== "PERSONALE"){ r.perc = sc; ricalcolaPrezzo(r); n++; } });
+  renderRighe(); update(); markDirty(); toast(`Sconto ${n2(sc)}% applicato a ${n} righe`);
+});
+$("#bApplRic").addEventListener("click", () => {
+  const ric = num($("#gRicarico").value); let n = 0;
+  S.offer.righe.forEach(r => { if (r.tipo !== "sez" && num(r.costo) > 0){ r.prezzo = r2(num(r.costo)*(1+ric/100)); ricalcolaPerc(r); n++; } });
+  renderRighe(); update(); markDirty(); toast(`Prezzi = costo + ${n2(ric)}% su ${n} righe`);
+});
+
+/* ---------------------------------------------------------------- editor: costi a me */
+function renderCosti(){
+  const C = S.offer.costi;
+  $("#tbCosti").innerHTML = C.length ? C.map((c,i)=>`<tr data-i="${i}"><td class="idx">${i+1}</td>
+    <td class="in int"><input data-k="descr" value="${esc(c.descr)}" placeholder="Es. Ore tecnico installazione"></td>
+    <td class="in">${perSel(c.periodo)}</td>
+    <td class="in"><input class="n w60" data-k="qta" inputmode="decimal" value="${esc(inN(c.qta))}"></td>
+    <td class="in int"><input class="n w80" data-k="costo" inputmode="decimal" value="${esc(inN(c.costo))}"></td>
+    <td class="c tot" data-o="tot"></td>
+    <td class="act"><button class="btn sm ghost danger" data-a="via" type="button" title="Elimina">✕</button></td></tr>`).join("")
+    : `<tr><td colspan="7"><div class="empty" style="padding:14px">Nessun costo interno.</div></td></tr>`;
+}
+$("#tbCosti").addEventListener("input", e => { const tr=e.target.closest("tr[data-i]"); if(!tr||!e.target.dataset.k) return; S.offer.costi[+tr.dataset.i][e.target.dataset.k] = e.target.value; update(); markDirty(); });
+$("#tbCosti").addEventListener("change", e => { if (e.target.tagName==="SELECT"){ const tr=e.target.closest("tr[data-i]"); S.offer.costi[+tr.dataset.i].periodo = e.target.value; update(); markDirty(); } });
+$("#tbCosti").addEventListener("click", e => { const b=e.target.closest("[data-a]"); if(!b) return; S.offer.costi.splice(+b.closest("tr").dataset.i,1); renderCosti(); update(); markDirty(); });
+$("#bAddCosto").addEventListener("click", () => { S.offer.costi.push({id:uid(), descr:"", periodo:"", qta:1, costo:""}); renderCosti(); update(); markDirty(); $(`#tbCosti tr[data-i="${S.offer.costi.length-1}"] input`).focus(); });
+$("#selPreset").addEventListener("change", e => {
+  const p = (S.settings.preset||[])[+e.target.value]; e.target.value = ""; if (!p) return;
+  S.offer.costi.push({id:uid(), descr:p.descr, periodo:p.periodo||"", qta:1, costo:p.costo}); renderCosti(); update(); markDirty();
+});
+
+/* ---------------------------------------------------------------- quadro economico */
+function update(){
+  const k = aggiornaCelle();
+  const righe = PERIODI.filter(([p]) => k.per[p].ricavo || k.per[p].costoTot);
+  $("#quadro").innerHTML = (righe.length ? `<table class="qt"><thead><tr><th></th><th>Cliente</th><th>Costo a me</th><th>Margine</th></tr></thead><tbody>
+    ${righe.map(([p,l]) => { const g = k.per[p]; return `<tr><td>${l}</td><td>${eur(g.ricavo)}</td><td title="${g.interni?"di cui costi interni "+eur(g.interni):""}">${eur(g.costoTot)}${g.interni?"*":""}</td><td class="m${g.marg<0?" neg":""}">${eur(g.marg)}</td></tr>`; }).join("")}
+    </tbody></table>${righe.some(([p])=>k.per[p].interni)?`<div class="hint" style="margin-top:4px">* compresi i costi interni: ${righe.filter(([p])=>k.per[p].interni).map(([p,l])=>l.toLowerCase()+" "+eur(k.per[p].interni)).join(", ")}</div>`:""}` : `<p class="hint">Aggiungi righe per vedere i conti.</p>`) + `
+    <div class="big"><div><div class="lab">Valore primo anno</div><div class="val">${eur(k.ricavo1)}</div></div>
+    <div class="guad${k.marg1<0?" neg":""}"><div class="lab">Margine primo anno</div><div class="val">${eur(k.marg1)}</div><div class="hint">${n2(k.perc1)}% sul venduto · costi ${eur(k.costo1)}</div></div></div>
+    <p class="hint" style="margin:8px 0 0">Primo anno = una tantum + 12 × mensile + annuale + 5 anni (pagati anticipati).</p>`;
+  return k;
+}
+
+/* ---------------------------------------------------------------- salvataggio */
+function toRow(o){
+  const k = calc(o);
+  return { numero:o.numero, data:o.data||today(), stato:o.stato, cliente_id:o.clienteId||null, cliente:o.cliente, cliente_blocco:o.clienteBlocco,
+    attenzione:o.attenzione, redatto:o.redatto, oggetto:o.oggetto, versione_listino:o.versione||"", parametri:o.parametri, righe:o.righe, costi:o.costi,
+    condizioni:o.condizioni, tot_una_tantum:r2(k.per[""].ricavo), tot_mensile:r2(k.per["1m"].ricavo), tot_annuale:r2(k.per["1y"].ricavo),
+    valore_anno1:r2(k.ricavo1), costo_anno1:r2(k.costo1), margine_anno1:r2(k.marg1) };
+}
+function fromRow(r){
+  return { id:r.id, numero:r.numero, data:r.data, stato:r.stato, clienteId:r.cliente_id||"", cliente:r.cliente||"", clienteBlocco:r.cliente_blocco||"",
+    attenzione:r.attenzione||"", redatto:r.redatto||"", oggetto:r.oggetto||"", versione:r.versione_listino||"",
+    parametri:Object.assign({sconto:0,ricarico:30,codici:true,unit:true,listino:false,en:false}, r.parametri||{}),
+    righe:r.righe||[], costi:r.costi||[], condizioni:Object.assign(clone(S.settings.cond), r.condizioni||{}), isNew:false, updatedAt:r.updated_at };
+}
+async function saveOffer(){
+  if (S.saving) return; const o = S.offer;
+  if (!String(o.numero).trim()) return toast("Manca il numero dell'offerta");
+  S.saving = true; setStatus();
+  try{
+    const row = toRow(o); let res;
+    if (o.isNew){
+      res = await S.sb.from("wx_offerte").insert(Object.assign({id:o.id}, row)).select("updated_at");
+      if (res.error && res.error.code === "23505"){
+        const {data} = await S.sb.rpc("wx_prossimo_numero"); if (data){ o.numero = row.numero = data; $("#oNumero").value = data; $("#hNum").textContent = data; }
+        res = await S.sb.from("wx_offerte").insert(Object.assign({id:o.id}, row)).select("updated_at");
+        if (!res.error) toast("Numero già usato: l'offerta è diventata " + o.numero);
+      }
+    } else {
+      const {data:cur} = await S.sb.from("wx_offerte").select("updated_at").eq("id", o.id).maybeSingle();
+      if (cur && o.updatedAt && cur.updated_at !== o.updatedAt && !saveOffer.forza){
+        S.saving = false; setStatus();
+        return confirmBox("Offerta modificata da un altro utente", "Qualcun altro ha salvato questa offerta dopo che l'hai aperta. Sovrascrivere con la tua versione?", "Sovrascrivi", async () => { saveOffer.forza = true; await saveOffer(); saveOffer.forza = false; }, true);
+      }
+      res = await S.sb.from("wx_offerte").update(row).eq("id", o.id).select("updated_at");
+    }
+    if (res.error) throw res.error;
+    o.isNew = false; o.updatedAt = res.data && res.data[0] ? res.data[0].updated_at : o.updatedAt;
+    S.dirty = false; lsSet(draftKey(), null);
+    $("#saveHint").textContent = "Salvata alle " + new Date().toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"});
+    loadArchivio();
+  }catch(e){ toast(errMsg(e)); }
+  S.saving = false; setStatus();
+}
+$("#bSalva").addEventListener("click", () => saveOffer());
+document.addEventListener("keydown", e => { if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="s"){ e.preventDefault(); if (!$("#v-offerta").hidden) saveOffer(); } });
+function guardDirty(go){ if (!S.dirty) return go(); confirmBox("Modifiche non salvate", "L'offerta aperta ha modifiche non salvate. Continuare e perderle?", "Continua", go, true); }
+$("#bNuova").addEventListener("click", () => guardDirty(() => { S.offer = newOffer(); S.dirty = false; lsSet(draftKey(), null); loadOfferIntoForm(); setStatus(); }));
+$("#bDuplica").addEventListener("click", () => guardDirty(() => duplica(S.offer)));
+function duplica(src){
+  const o = clone(src); o.id = uid(); o.numero = nextNumero(); o.data = today(); o.stato = "Bozza"; o.isNew = true; o.updatedAt = null;
+  o.righe.forEach(r => r.id = uid()); S.offer = o; S.dirty = true; loadOfferIntoForm(); show("offerta"); setStatus(); toast("Copia creata: " + o.numero + " (da salvare)");
+}
+async function openOffer(id){
+  const {data, error} = await S.sb.from("wx_offerte").select("*").eq("id", id).maybeSingle();
+  if (error || !data) return toast(error ? errMsg(error) : "Offerta non trovata");
+  S.offer = fromRow(data); S.dirty = false; lsSet(draftKey(), null); loadOfferIntoForm(); setStatus(); show("offerta");
+}
+
+/* ---------------------------------------------------------------- archivio */
+async function loadArchivio(){
+  const {data, error} = await S.sb.from("wx_offerte").select("id, numero, data, stato, cliente, oggetto, tot_una_tantum, tot_mensile, tot_annuale, valore_anno1, margine_anno1, updated_at, updated_by").order("updated_at", {ascending:false}).range(0, 999);
+  if (error){ toast(errMsg(error)); return; }
+  S.offerte = data || []; if (!$("#v-archivio").hidden) renderArchivio();
+}
+function renderArchivio(){
+  const q = $("#qArch").value.trim().toLowerCase();
+  const L = S.offerte.filter(o => !q || [o.numero,o.cliente,o.oggetto,o.stato].join(" ").toLowerCase().includes(q));
+  $("#archList").innerHTML = L.length ? `<div class="tablewrap" style="border:0"><table class="list"><thead><tr><th>Nr.</th><th>Data</th><th>Cliente</th><th>Oggetto</th><th>Stato</th><th class="r">Una tantum</th><th class="r">Mensile</th><th class="r">Margine 1° anno</th><th>Ultima modifica</th><th></th></tr></thead><tbody>
+    ${L.map(o => `<tr class="click" data-id="${esc(o.id)}"><td><b>${esc(o.numero)}</b></td><td>${fmtDate(o.data)}</td><td>${esc(o.cliente)}</td><td>${esc(o.oggetto)}</td>
+      <td><span class="chip ${o.stato==="Accettata"?"good":o.stato==="Inviata"?"navy":o.stato==="Persa"?"red":""}">${esc(o.stato)}</span></td>
+      <td class="r">${eur(+o.tot_una_tantum)}</td><td class="r">${eur(+o.tot_mensile)}</td><td class="r">${eur(+o.margine_anno1)}</td>
+      <td class="hint">${new Date(o.updated_at).toLocaleString("it-IT",{dateStyle:"short",timeStyle:"short"})}${S.utenti[o.updated_by]?" · "+esc(S.utenti[o.updated_by]):""}</td>
+      <td style="white-space:nowrap"><button class="btn sm" data-a="dup" type="button">Duplica</button> <button class="btn sm ghost danger" data-a="del" type="button">Elimina</button></td></tr>`).join("")}
+    </tbody></table></div>` : `<div class="empty"><b>${q?"Nessuna offerta trovata":"Nessuna offerta salvata"}</b>${q?"":"Le offerte salvate compaiono qui."}</div>`;
+}
+$("#qArch").addEventListener("input", renderArchivio);
+$("#archList").addEventListener("click", async e => {
+  const tr = e.target.closest("tr[data-id]"); if (!tr) return; const id = tr.dataset.id, o = S.offerte.find(x=>x.id===id);
+  const a = e.target.closest("[data-a]");
+  if (a && a.dataset.a === "del") return confirmBox("Eliminare l'offerta " + o.numero + "?", "L'offerta viene cancellata per tutti e non si può recuperare.", "Elimina", async () => {
+    const {error} = await S.sb.from("wx_offerte").delete().eq("id", id); if (error) return toast(errMsg(error));
+    if (S.offer && S.offer.id === id){ S.offer = newOffer(); S.dirty = false; loadOfferIntoForm(); }
+    await loadArchivio(); renderArchivio(); toast("Offerta eliminata"); }, true);
+  if (a && a.dataset.a === "dup") return guardDirty(async () => { const {data} = await S.sb.from("wx_offerte").select("*").eq("id", id).maybeSingle(); if (data) duplica(fromRow(data)); });
+  guardDirty(() => openOffer(id));
+});
+
+/* ---------------------------------------------------------------- clienti */
+const CLI_KEYS = ["rs","ind","cap","citta","prov","piva","email","pec","sdi","ref","tel"];
+const CLI_LAB = {rs:"Ragione sociale",ind:"Indirizzo",cap:"CAP",citta:"Città",prov:"Prov.",piva:"P.IVA / C.F.",email:"Email",pec:"PEC",sdi:"Codice SDI",ref:"Referente",tel:"Telefono"};
+async function loadClienti(){
+  const all = [];
+  for (let from=0; ; from+=1000){
+    const {data, error} = await S.sb.from("wx_clienti").select("*").order("rs").range(from, from+999);
+    if (error){ toast(errMsg(error)); break; } all.push(...data); if (data.length < 1000) break;
+  }
+  S.clienti = all; fillDatalists(); if (!$("#v-clienti").hidden) renderClienti();
+}
+function renderClienti(){
+  const q = $("#qCli").value.trim().toLowerCase();
+  const L = S.clienti.filter(c => !q || [c.rs,c.citta,c.piva,c.ref].join(" ").toLowerCase().includes(q)).slice(0,300);
+  $("#cliList").innerHTML = L.length ? `<table class="list"><thead><tr><th>Ragione sociale</th><th>Città</th><th>P.IVA</th><th>Referente</th><th>Contatti</th></tr></thead><tbody>
+    ${L.map(c=>`<tr class="click" data-id="${esc(c.id)}"><td><b>${esc(c.rs)}</b></td><td>${esc([c.citta,c.prov&&"("+c.prov+")"].filter(Boolean).join(" "))}</td><td>${esc(c.piva)}</td><td>${esc(c.ref)}</td><td class="hint">${esc([c.tel,c.email].filter(Boolean).join(" · "))}</td></tr>`).join("")}</tbody></table>`
+    : `<div class="empty"><b>${q?"Nessun cliente trovato":"Nessun cliente"}</b>Aggiungili con “+ Nuovo” o importa un CSV. Puoi anche scrivere il nome direttamente nell'offerta.</div>`;
+}
+$("#qCli").addEventListener("input", renderClienti);
+$("#cliList").addEventListener("click", e => { const tr=e.target.closest("tr[data-id]"); if (tr) editCliente(S.clienti.find(c=>c.id===tr.dataset.id)); });
+$("#bNuovoCli").addEventListener("click", () => editCliente(null));
+function editCliente(c){
+  const nuovo = !c; c = c ? clone(c) : {id:uid()};
+  const L = openLayer(`<div class="dialog"><h2>${nuovo?"Nuovo cliente":"Cliente"}</h2><div class="grid g2">
+    ${CLI_KEYS.map(k=>`<label class="f${k==="rs"||k==="ind"?" span2":""}">${CLI_LAB[k]}<input data-c="${k}" value="${esc(c[k]||"")}"></label>`).join("")}</div>
+    <div class="foot">${nuovo?"":`<button class="btn ghost danger" data-x="del" type="button" style="margin-right:auto">Elimina</button>`}<button class="btn" data-x="no" type="button">Annulla</button><button class="btn primary" data-x="ok" type="button">Salva</button></div></div>`);
+  L.addEventListener("click", async e => {
+    const x = e.target.closest("[data-x]"); if (!x) return;
+    if (x.dataset.x === "no") return closeLayer();
+    if (x.dataset.x === "del"){ const {error} = await S.sb.from("wx_clienti").delete().eq("id", c.id); if (error) return toast(errMsg(error)); closeLayer(); await loadClienti(); return toast("Cliente eliminato"); }
+    const row = {id:c.id}; $$("[data-c]", L).forEach(i => row[i.dataset.c] = i.value.trim());
+    if (!row.rs) return toast("Manca la ragione sociale");
+    const {error} = await S.sb.from("wx_clienti").upsert(row); if (error) return toast(errMsg(error));
+    closeLayer(); await loadClienti(); toast("Cliente salvato");
+  });
+}
+function parseCSV(t){
+  const first = t.split(/\r?\n/)[0] || ""; const sep = (first.match(/;/g)||[]).length >= (first.match(/,/g)||[]).length ? ";" : ",";
+  const rows = []; let row = [], cur = "", q = false;
+  for (let i=0;i<t.length;i++){ const ch=t[i];
+    if (q){ if (ch==='"'){ if (t[i+1]==='"'){ cur+='"'; i++; } else q=false; } else cur+=ch; }
+    else if (ch==='"') q=true; else if (ch===sep){ row.push(cur); cur=""; } else if (ch==="\n"){ row.push(cur.replace(/\r$/,"")); rows.push(row); row=[]; cur=""; } else cur+=ch; }
+  if (cur || row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(r => r.some(c => c.trim()));
+}
+$("#fCsv").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  const rows = parseCSV(await f.text()); if (rows.length < 2) return toast("File vuoto");
+  const norm = s => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z]/g,"");
+  const MAP = {rs:["ragionesociale","rs","cliente","nome","denominazione","ragsoc"], ind:["indirizzo","via"], cap:["cap"], citta:["citta","comune","localita"], prov:["provincia","prov","pr"],
+    piva:["partitaiva","piva","pi","codicefiscale","cf","pivacf"], email:["email","mail"], pec:["pec"], sdi:["sdi","codicesdi","codicedestinatario"], tel:["telefono","tel","cellulare"], ref:["referente","contatto","attenzione"]};
+  const head = rows[0].map(norm); const idx = {};
+  for (const k in MAP){ const j = head.findIndex(h => MAP[k].includes(h)); if (j >= 0) idx[k] = j; }
+  if (idx.rs === undefined) return toast("Colonna 'ragione sociale' non trovata");
+  const esist = new Map(S.clienti.map(c => [(c.piva||c.rs).toLowerCase(), c.id]));
+  const out = rows.slice(1).map(r => { const c = {}; CLI_KEYS.forEach(k => c[k] = idx[k]!==undefined ? String(r[idx[k]]||"").trim() : ""); c.id = esist.get((c.piva||c.rs).toLowerCase()) || uid(); return c; }).filter(c => c.rs);
+  for (let i=0;i<out.length;i+=500){ const {error} = await S.sb.from("wx_clienti").upsert(out.slice(i,i+500)); if (error) return toast(errMsg(error)); }
+  await loadClienti(); toast(`${out.length} clienti importati`);
+});
+
+/* ---------------------------------------------------------------- listini */
+async function renderListini(){
+  const vers = await loadVersioni();
+  const V = S.versioni.filter(v => v.listino !== "PERSONALE");
+  $("#verList").innerHTML = V.length ? `<table class="list"><thead><tr><th>Versione</th><th>Listino</th><th class="r">Righe</th><th></th></tr></thead><tbody>
+    ${V.map(v=>`<tr><td><b>${esc(v.versione)}</b>${v.versione===S.settings.versione?' <span class="chip good">in uso</span>':""}</td><td><span class="tag ${esc(v.listino)}">${esc(v.listino)}</span></td><td class="r">${v.righe}</td>
+      <td class="r"><button class="btn sm ghost danger" data-delv="${esc(v.versione)}" data-dell="${esc(v.listino)}" type="button">Elimina</button></td></tr>`).join("")}</tbody></table>`
+    : `<div class="empty"><b>Nessun listino nel database</b>Premi il pulsante qui sotto per caricare il listino Wildix di Novembre 2026.</div>`;
+  $("#selVersione").innerHTML = vers.length ? vers.map(v=>`<option${v===S.settings.versione?" selected":""}>${esc(v)}</option>`).join("") : `<option value="">—</option>`;
+  $("#inclusi").innerHTML = LISTINI_INCLUSI.map((l,i)=>`<button class="btn primary" data-inc="${i}" type="button">${vers.includes(l.versione)?"Ricarica":"Carica"} listino incluso: ${esc(l.versione)} (Capex, Opex, Classound)</button>`).join("");
+  renderMiei();
+}
+$("#verList").addEventListener("click", e => {
+  const b = e.target.closest("[data-delv]"); if (!b) return;
+  confirmBox(`Eliminare ${b.dataset.dell} ${b.dataset.delv}?`, "Le righe di questo listino vengono tolte dal database. Le offerte già fatte non cambiano (hanno i prezzi copiati dentro).", "Elimina", async () => {
+    const {error} = await S.sb.from("wx_listino").delete().eq("versione", b.dataset.delv).eq("listino", b.dataset.dell); if (error) return toast(errMsg(error));
+    await renderListini(); await loadListino(); toast("Listino eliminato"); }, true);
+});
+$("#selVersione").addEventListener("change", async e => { S.settings.versione = e.target.value; await salvaSettings(true); await loadListino(); renderListini(); toast("Listino in uso: " + S.settings.versione); });
+async function importaListino(json){
+  if (!json || !json.versione || !Array.isArray(json.righe)) throw new Error("File listino non valido");
+  const C = json.campi || ["listino","categoria","codice","descrizione","fascia","q_min","q_max","periodo","prezzo_gold","prezzo_eu","ppm_gold","ppm_eu"];
+  const seen = new Set();
+  const rows = json.righe.map(r => { const o = Array.isArray(r) ? Object.fromEntries(C.map((k,i)=>[k, r[i]])) : r; o.versione = json.versione; o.fascia = o.fascia||""; o.periodo = o.periodo||""; return o; })
+    .filter(o => { const k = [o.listino,o.codice,o.fascia].join("|"); if (seen.has(k)) return false; seen.add(k); return ["CAPEX","OPEX","CLASSOUND"].includes(o.listino) && o.codice; });
+  const hint = $("#impHint");
+  for (let i=0;i<rows.length;i+=400){
+    hint.textContent = `Caricamento ${json.versione}: ${Math.min(i+400, rows.length)} / ${rows.length} righe…`;
+    const {error} = await S.sb.from("wx_listino").upsert(rows.slice(i,i+400), {onConflict:"versione,listino,codice,fascia"});
+    if (error) throw error;
+  }
+  hint.textContent = `${json.versione}: ${rows.length} righe caricate.`;
+  S.settings.versione = json.versione; await salvaSettings(true);
+  await renderListini(); await loadListino();
+}
+$("#inclusi").addEventListener("click", async e => {
+  const b = e.target.closest("[data-inc]"); if (!b) return; const l = LISTINI_INCLUSI[+b.dataset.inc]; b.disabled = true;
+  try{ const res = await fetch(l.file, {cache:"no-cache"}); if (!res.ok) throw new Error("File " + l.file + " non trovato"); await importaListino(await res.json()); toast("Listino " + l.versione + " caricato"); }
+  catch(err){ toast(errMsg(err)); $("#impHint").textContent = errMsg(err); }
+  b.disabled = false;
+});
+$("#fListino").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  try{ await importaListino(JSON.parse(await f.text())); toast("Listino caricato"); } catch(err){ toast(errMsg(err)); $("#impHint").textContent = errMsg(err); }
+});
+function renderMiei(){
+  const M = S.listino.filter(a => a.listino === "PERSONALE");
+  $("#mieiList").innerHTML = M.length ? `<table class="list"><thead><tr><th>Codice</th><th>Descrizione</th><th>Categoria</th><th>Periodo</th><th class="r">Costo a me</th><th class="r">Prezzo cliente</th></tr></thead><tbody>
+    ${M.map(a=>`<tr class="click" data-id="${esc(a.id)}"><td><b>${esc(a.codice)}</b></td><td>${esc(a.descrizione)}</td><td>${esc(a.categoria)}</td><td>${PER_LAB[a.periodo||""]}</td><td class="r">${eur(a.prezzo_gold)}</td><td class="r">${eur(a.prezzo_eu)}</td></tr>`).join("")}</tbody></table>`
+    : `<div class="empty"><b>Nessun articolo tuo</b>Es. switch, router, cablaggio, ore di installazione, connettività: inserisci costo e prezzo una volta e li ritrovi nella ricerca.</div>`;
+}
+$("#mieiList").addEventListener("click", e => { const tr=e.target.closest("tr[data-id]"); if (tr) editArticolo(S.listino.find(a=>String(a.id)===tr.dataset.id)); });
+$("#bNuovoArt").addEventListener("click", () => editArticolo(null));
+function editArticolo(a){
+  const nuovo = !a; a = a ? clone(a) : {codice:"", descrizione:"", categoria:"", periodo:"", prezzo_gold:"", prezzo_eu:""};
+  const L = openLayer(`<div class="dialog"><h2>${nuovo?"Nuovo articolo":"Articolo"}</h2><div class="grid g2">
+    <label class="f">Codice<input data-c="codice" value="${esc(a.codice)}"></label>
+    <label class="f">Categoria<input data-c="categoria" value="${esc(a.categoria)}" placeholder="Es. Networking, Servizi"></label>
+    <label class="f span2">Descrizione<input data-c="descrizione" value="${esc(a.descrizione)}"></label>
+    <label class="f">Costo a me<input data-c="prezzo_gold" inputmode="decimal" value="${esc(inN(a.prezzo_gold))}"></label>
+    <label class="f">Prezzo al cliente<input data-c="prezzo_eu" inputmode="decimal" value="${esc(inN(a.prezzo_eu))}"></label>
+    <label class="f">Periodo<select data-c="periodo">${PERIODI.map(([p,l])=>`<option value="${p}"${(a.periodo||"")===p?" selected":""}>${l}</option>`).join("")}</select></label></div>
+    <div class="foot">${nuovo?"":`<button class="btn ghost danger" data-x="del" type="button" style="margin-right:auto">Elimina</button>`}<button class="btn" data-x="no" type="button">Annulla</button><button class="btn primary" data-x="ok" type="button">Salva</button></div></div>`);
+  L.addEventListener("click", async e => {
+    const x = e.target.closest("[data-x]"); if (!x) return;
+    if (x.dataset.x === "no") return closeLayer();
+    if (x.dataset.x === "del"){ const {error} = await S.sb.from("wx_listino").delete().eq("id", a.id); if (error) return toast(errMsg(error)); closeLayer(); await loadListino(); renderMiei(); return; }
+    const row = {}; $$("[data-c]", L).forEach(i => row[i.dataset.c] = i.value.trim());
+    if (!row.codice || !row.descrizione) return toast("Servono codice e descrizione");
+    row.prezzo_gold = num(row.prezzo_gold); row.prezzo_eu = num(row.prezzo_eu);
+    let res;
+    if (nuovo) res = await S.sb.from("wx_listino").insert(Object.assign({versione:"Miei", listino:"PERSONALE", fascia:""}, row));
+    else res = await S.sb.from("wx_listino").update(row).eq("id", a.id);
+    if (res.error) return toast(res.error.code==="23505" ? "Esiste già un articolo con questo codice" : errMsg(res.error));
+    closeLayer(); await loadListino(); renderMiei(); toast("Articolo salvato");
+  });
+}
+
+/* ---------------------------------------------------------------- impostazioni */
+function renderSettings(){
+  const s = S.settings, a = s.azienda, c = s.cond;
+  $("#sAzNome").value = a.nome; $("#sAzTel").value = a.tel; $("#sAzDet").value = a.dettagli;
+  $("#sLogoPrev").src = a.logo || ""; $("#sLogoPrev").hidden = !a.logo; $("#bLogoVia").hidden = !a.logo;
+  $("#sSconto").value = inN(s.sconto); $("#sRicarico").value = inN(s.ricarico);
+  $("#sValidita").value = c.validita; $("#sIva").value = c.iva; $("#sPagamento").value = c.pagamento; $("#sConsegna").value = c.consegna;
+  $("#sDurata").value = c.durata; $("#sGaranzia").value = c.garanzia; $("#sNote").value = c.note;
+  $("#sPreset").value = (s.preset||[]).map(p => [p.descr, inN(p.costo), p.periodo||""].join(" ; ")).join("\n");
+  $("#sMioNome").value = (S.profilo && S.profilo.nome) || "";
+}
+$("#sLogo").addEventListener("change", e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  const img = new Image(); const rd = new FileReader();
+  rd.onload = () => { img.onload = () => { const h = 120, w = Math.round(img.width * h / img.height); const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    cv.getContext("2d").drawImage(img, 0, 0, w, h); S.settings.azienda.logo = cv.toDataURL("image/png"); $("#sLogoPrev").src = S.settings.azienda.logo; $("#sLogoPrev").hidden = false; $("#bLogoVia").hidden = false; $("#setHint").textContent = "Premi “Salva impostazioni”."; }; img.src = rd.result; };
+  rd.readAsDataURL(f);
+});
+$("#bLogoVia").addEventListener("click", () => { S.settings.azienda.logo = ""; renderSettings(); $("#setHint").textContent = "Premi “Salva impostazioni”."; });
+async function salvaSettings(silenzioso){
+  const {error} = await S.sb.from("wx_impostazioni").update({dati: clone(S.settings)}).eq("id", 1);
+  if (error){ toast(errMsg(error)); return false; }
+  if (!silenzioso) toast("Impostazioni salvate"); return true;
+}
+$("#bSalvaSet").addEventListener("click", async () => {
+  const s = S.settings;
+  s.azienda.nome = $("#sAzNome").value.trim(); s.azienda.tel = $("#sAzTel").value.trim(); s.azienda.dettagli = $("#sAzDet").value;
+  s.sconto = num($("#sSconto").value); s.ricarico = num($("#sRicarico").value);
+  Object.assign(s.cond, {validita:+$("#sValidita").value||0, iva:$("#sIva").value, pagamento:$("#sPagamento").value, consegna:$("#sConsegna").value, durata:$("#sDurata").value, garanzia:$("#sGaranzia").value, note:$("#sNote").value});
+  s.preset = $("#sPreset").value.split("\n").map(l => l.split(";").map(x=>x.trim())).filter(p => p[0]).map(p => ({descr:p[0], costo:num(p[1]), periodo:["1m","1y","5y"].includes(p[2])?p[2]:""}));
+  if (await salvaSettings()){ $("#setHint").textContent = "Salvate. Valgono per le offerte nuove."; fillDatalists(); }
+});
+$("#bMioNome").addEventListener("click", async () => {
+  const nome = $("#sMioNome").value.trim(); if (!nome) return;
+  const {error} = await S.sb.from("wx_utenti").update({nome}).eq("user_id", S.user.id); if (error) return toast(errMsg(error));
+  S.profilo = Object.assign(S.profilo||{}, {nome}); $("#userName").textContent = nome; toast("Nome salvato");
+});
+
+/* ---------------------------------------------------------------- stampa */
+function testata(az){
+  return `<div class="ph"><div>${az.logo ? `<img class="logo" src="${az.logo}" alt="">` : `<div class="az">${esc(az.nome)}</div>`}</div><div class="det">${az.logo?`<b>${esc(az.nome)}</b><br>`:""}${esc(az.dettagli).replace(/\n/g,"<br>")}</div></div>`;
+}
+function testataOfferta(o, titolo){
+  return `<div class="tit">${titolo}</div>
+    <div class="hdr"><div class="box"><small>Spett.le</small>${esc(o.clienteBlocco || o.cliente)}</div>
+      <table class="meta"><tr><td>Offerta nr.</td><td>${esc(o.numero)}</td></tr><tr><td>Data</td><td>${fmtDate(o.data)}</td></tr>
+      <tr><td>Cortese attenzione</td><td>${esc(o.attenzione)}</td></tr><tr><td>Redatto da</td><td>${esc(o.redatto)}</td></tr></table></div>
+    <div class="ogg">OGGETTO: <span>${esc(o.oggetto)}</span></div>`;
+}
+function paperHtml(o){
+  const k = calc(o), P = o.parametri, az = S.settings.azienda;
+  const periodiUsati = PERIODI.filter(([p]) => k.rows.some(c => !c.sez && c.filled && c.p === p));
+  const colPer = periodiUsati.length > 1;
+  const cols = 1 + (P.codici?1:0) + 1 + (P.listino?2:0) + (P.unit?1:0) + 1 + (colPer?1:0);
+  const body = o.righe.map((r,i) => {
+    const c = k.rows[i];
+    if (r.tipo === "sez") return r.descr ? `<tr class="sez"><td colspan="${cols}">${esc(r.descr)}</td></tr>` : "";
+    if (!c.filled) return "";
+    const en = P.en && r.descrEn && r.descrEn !== r.descr ? `<span class="en">${esc(r.descrEn)}</span>` : "";
+    const sc = haListino(r) && num(r.listino) ? (1 - c.prezzo/num(r.listino))*100 : 0;
+    return `<tr>${P.codici?`<td>${esc(r.codice)}</td>`:""}<td>${esc(r.descr).replace(/\n/g,"<br>")}${en}</td><td class="c">${n2(c.qta)}</td>
+      ${P.listino?`<td class="r">${haListino(r)?fmtI.format(num(r.listino))+" €":""}</td><td class="r">${sc>0.004?n2(sc)+"%":""}</td>`:""}
+      ${P.unit?`<td class="r">${fmtI.format(c.prezzo)} €</td>`:""}<td class="r">${eur(c.tot)}</td>${colPer?`<td class="c">${PER_LAB[c.p]}</td>`:""}</tr>`;
+  }).join("");
+  const tot = PERIODI.filter(([p]) => k.per[p].ricavo).map(([p]) => `<tr${p===""||periodiUsati.length===1?' class="g"':""}><td>${PER_STAMPA[p]} (IVA esclusa)</td><td class="r">${eur(k.per[p].ricavo)}</td></tr>`).join("");
+  const c = o.condizioni, canoni = k.per["1m"].ricavo || k.per["1y"].ricavo || k.per["5y"].ricavo;
+  const cond = [["Validità offerta", c.validita ? fmtDate(addDays(o.data, c.validita)) : ""], ["Pagamento", c.pagamento], ["Consegna / attivazione", c.consegna],
+    canoni ? ["Durata contratto canoni", c.durata] : null, ["Garanzia", c.garanzia], ["IVA", c.iva]].filter(x => x && x[1]);
+  return `<div class="paper">${testata(az)}${testataOfferta(o, "OFFERTA")}
+    <table class="pr"><thead><tr>${P.codici?"<th>Codice</th>":""}<th>Descrizione</th><th>Q.tà</th>${P.listino?"<th>Listino</th><th>Sconto</th>":""}${P.unit?"<th>Prezzo unit.</th>":""}<th>Totale</th>${colPer?"<th>Periodicità</th>":""}</tr></thead>
+    <tbody>${body || `<tr><td colspan="${cols}" class="c">Nessuna riga compilata</td></tr>`}</tbody></table>
+    <table class="tots">${tot || `<tr><td>Totale</td><td class="r">${eur(0)}</td></tr>`}</table>
+    ${cond.length ? `<h3 style="margin:18px 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.05em">Condizioni di fornitura</h3><table class="cond">${cond.map(([a,b])=>`<tr><td>${esc(a)}</td><td>${esc(b)}</td></tr>`).join("")}</table>` : ""}
+    ${c.note ? `<div class="note">${esc(c.note)}</div>` : ""}
+    <p style="margin:12px 0 0">${az.tel ? `Per qualsiasi chiarimento: <b>${esc(az.tel)}</b><br>` : ""}Grazie per averci scelto!</p>
+    <div class="firma"><div>Timbro e firma del cliente per accettazione</div></div></div>`;
+}
+function paperInterno(o){
+  const k = calc(o), az = S.settings.azienda;
+  const body = o.righe.map((r,i) => { const c = k.rows[i];
+    if (r.tipo === "sez") return r.descr ? `<tr class="sez"><td colspan="8">${esc(r.descr)}</td></tr>` : "";
+    if (!c.filled) return "";
+    return `<tr><td>${esc(r.codice)}${r.fascia?`<br><small>${esc(r.fascia)}</small>`:""}</td><td>${esc(r.descr)}</td><td class="c">${PER_LAB[c.p]}</td><td class="c">${n2(c.qta)}</td>
+      <td class="r g">${fmtI.format(c.costo)} €</td><td class="r">${fmtI.format(c.prezzo)} €</td><td class="r g">${eur(c.cTot)}</td><td class="r">${eur(c.tot)}</td><td class="r"><b>${eur(c.marg)}</b></td></tr>`; }).join("");
+  const costi = o.costi.filter(c => String(c.descr).trim() || num(c.costo)).map((c,i) => `<tr><td>${esc(c.descr)}</td><td class="c">${PER_LAB[c.periodo||""]}</td><td class="c">${n2(num(c.qta))}</td><td class="r">${fmtI.format(num(c.costo))} €</td><td class="r">${eur(k.costi[o.costi.indexOf(c)])}</td></tr>`).join("");
+  const sum = PERIODI.filter(([p]) => k.per[p].ricavo || k.per[p].costoTot).map(([p,l]) => { const g = k.per[p];
+    return `<tr><td>${l}</td><td class="r">${eur(g.ricavo)}</td><td class="r">${eur(g.costo)}</td><td class="r">${eur(g.interni)}</td><td class="r"><b>${eur(g.marg)}</b></td><td class="r">${g.ricavo?n2(g.marg/g.ricavo*100)+"%":""}</td></tr>`; }).join("");
+  return `<div class="paper">${testata(az)}<div class="interno">DOCUMENTO INTERNO – ANALISI COSTI E MARGINI – NON INVIARE AL CLIENTE</div>${testataOfferta(o, "ANALISI OFFERTA")}
+    <table class="pr"><thead><tr><th>Codice</th><th>Descrizione</th><th>Periodo</th><th>Q.tà</th><th>Costo unit.</th><th>Prezzo unit.</th><th>Costo tot.</th><th>Ricavo tot.</th><th>Margine</th></tr></thead><tbody>${body}</tbody></table>
+    ${costi ? `<h3 style="margin:16px 0 6px;font-size:13px;text-transform:uppercase">Costi a me non fatturati</h3><table class="pr"><thead><tr><th>Descrizione</th><th>Periodo</th><th>Q.tà</th><th>Costo unit.</th><th>Totale</th></tr></thead><tbody>${costi}</tbody></table>` : ""}
+    <h3 style="margin:16px 0 6px;font-size:13px;text-transform:uppercase">Riepilogo</h3>
+    <table class="pr"><thead><tr><th>Periodo</th><th>Ricavo</th><th>Costo articoli</th><th>Costi interni</th><th>Margine</th><th>%</th></tr></thead><tbody>${sum}
+    <tr class="sez"><td>Primo anno</td><td class="r">${eur(k.ricavo1)}</td><td class="r" colspan="2">${eur(k.costo1)}</td><td class="r">${eur(k.marg1)}</td><td class="r">${n2(k.perc1)}%</td></tr></tbody></table>
+    <p class="hint" style="margin-top:8px;color:#555">Listino: ${esc(o.versione||"—")}. Primo anno = una tantum + 12 × mensile + annuale + 5 anni.</p></div>`;
+}
+function stampa(html, nome){
+  $("#printArea").innerHTML = html;
+  const prev = document.title; document.title = nome.replace(/[\/\\:*?"<>|]/g, "-");
+  setTimeout(() => { window.print(); document.title = prev; }, 80);
+}
+const nomeFile = (o, pre) => pre + " " + o.numero + (o.cliente ? " - " + o.cliente : "");
+$("#bAnteprima").addEventListener("click", () => {
+  const L = openLayer(`<div class="dialog wide" style="background:var(--bg)"><div class="row" style="margin-bottom:12px">
+      <h2 style="margin:0">Anteprima per il cliente</h2>
+      <div class="sp row" style="margin-left:auto"><button class="btn primary" data-x="print" type="button">Stampa / Salva PDF</button><button class="btn" data-x="close" type="button">Chiudi</button></div></div>
+      <p class="hint" style="margin:-4px 0 12px">“Stampa / Salva PDF” apre la finestra di stampa: come stampante scegli <b>Salva come PDF</b>. I costi a me non compaiono.</p>
+      <div class="paper-wrap">${paperHtml(S.offer)}</div></div>`);
+  L.addEventListener("click", e => { const x=e.target.closest("[data-x]"); if(!x) return; if (x.dataset.x==="close") closeLayer(); if (x.dataset.x==="print") stampa(paperHtml(S.offer), nomeFile(S.offer, "Offerta")); });
+});
+$("#bInterno").addEventListener("click", () => stampa(paperInterno(S.offer), nomeFile(S.offer, "INTERNO Analisi")));
+
+/* ---------------------------------------------------------------- dialoghi */
+function openLayer(html){ const l=$("#layer"); l.innerHTML=`<div class="overlay" role="dialog" aria-modal="true">${html}</div>`; const ov=l.firstChild;
+  ov.addEventListener("click", e=>{ if(e.target===ov) closeLayer(); }); const f=$("input, button.primary, button", ov); f&&f.focus(); return ov; }
+function closeLayer(){ $("#layer").innerHTML=""; }
+document.addEventListener("keydown", e => { if (e.key==="Escape" && $("#layer").firstChild) closeLayer(); });
+function confirmBox(title, text, okLabel, onOk, danger){
+  const L = openLayer(`<div class="dialog"><h2>${esc(title)}</h2><p>${esc(text)}</p><div class="foot"><button class="btn" data-x="no" type="button">Annulla</button><button class="btn ${danger?"primary":"navy"}" data-x="ok" type="button">${esc(okLabel)}</button></div></div>`);
+  L.addEventListener("click", e => { const x=e.target.closest("[data-x]"); if(!x) return; closeLayer(); if (x.dataset.x==="ok") onOk(); });
+}
+
+/* ---------------------------------------------------------------- accesso e avvio */
+const flowHash = location.hash; const vuolePassword = /type=(recovery|invite)/.test(flowHash);
+function showLogin(msg){ $("#appRoot").hidden = true; $("#loginRoot").hidden = false; $("#fLogin").hidden = false; $("#fNuovaPwd").hidden = true; $("#lErr").textContent = msg || ""; $("#lEmail").focus(); }
+function showNuovaPwd(){ $("#appRoot").hidden = true; $("#loginRoot").hidden = false; $("#fLogin").hidden = true; $("#fNuovaPwd").hidden = false; $("#nPwd").focus(); }
+$("#fLogin").addEventListener("submit", async e => {
+  e.preventDefault(); $("#lErr").textContent = "";
+  const {data, error} = await S.sb.auth.signInWithPassword({email: $("#lEmail").value.trim(), password: $("#lPwd").value});
+  if (error) return $("#lErr").textContent = /invalid/i.test(error.message) ? "Email o password errate." : error.message;
+  startApp(data.user);
+});
+$("#bRecupera").addEventListener("click", async () => {
+  const email = $("#lEmail").value.trim(); if (!email) return $("#lErr").textContent = "Scrivi prima la tua email.";
+  const {error} = await S.sb.auth.resetPasswordForEmail(email, {redirectTo: location.origin + location.pathname});
+  $("#lErr").textContent = error ? error.message : "Se l'email è registrata, arriva un link per scegliere una nuova password.";
+});
+$("#fNuovaPwd").addEventListener("submit", async e => {
+  e.preventDefault(); if ($("#nPwd").value !== $("#nPwd2").value) return $("#nErr").textContent = "Le due password non coincidono.";
+  const {data, error} = await S.sb.auth.updateUser({password: $("#nPwd").value}); if (error) return $("#nErr").textContent = error.message;
+  history.replaceState(null, "", location.pathname); startApp(data.user);
+});
+$("#bEsci").addEventListener("click", () => guardDirty(async () => { S.dirty = false; await S.sb.auth.signOut(); location.replace(location.pathname); }));
+
+async function startApp(user){
+  const acc = await S.sb.rpc("wx_registra_accesso");
+  if (acc.error || !acc.data){
+    await S.sb.auth.signOut();
+    return showLogin(acc.error ? errMsg(acc.error) : "Il tuo utente non è abilitato al preventivatore: chiedi di aggiungere la tua email in wx_utenti.");
+  }
+  S.user = user;
+  const [imp, prof, ut] = await Promise.all([
+    S.sb.from("wx_impostazioni").select("dati").eq("id", 1).maybeSingle(),
+    S.sb.from("wx_utenti").select("user_id, nome, email").eq("user_id", user.id).maybeSingle(),
+    S.sb.from("wx_utenti").select("user_id, nome")
+  ]);
+  S.settings = deepMerge(DEFAULT_SET, imp.data && imp.data.dati);
+  S.profilo = prof.data || {nome: user.email};
+  (ut.data||[]).forEach(u => S.utenti[u.user_id] = u.nome);
+  $("#userName").textContent = S.profilo.nome || user.email;
+  $("#loginRoot").hidden = true; $("#appRoot").hidden = false;
+  await loadVersioni();
+  await Promise.all([loadListino(), loadClienti(), loadArchivio()]);
+  fillDatalists();
+  const bozza = lsGet(draftKey(), null);
+  if (bozza && bozza.righe){ S.offer = bozza; S.dirty = true; toast("Ripresa l'offerta che stavi scrivendo (non salvata)"); }
+  else S.offer = newOffer();
+  loadOfferIntoForm(); setStatus();
+  if (!S.listino.some(a => a.listino !== "PERSONALE")) banner2("Il database non ha ancora il listino Wildix: vai nella scheda Listini e premi “Carica listino incluso”.");
+}
+function banner(t){ const b=$("#banner"); b.textContent=t; b.hidden=false; }
+function banner2(t){ const b=$("#banner"); const p=document.createElement("div"); p.id="avvisoListino"; p.textContent=t; p.style.marginTop="4px"; b.appendChild(p); b.hidden=false; }
+async function boot(){
+  const senzaChiavi = !CFG.SUPABASE_URL || /INCOLLA/.test(CFG.SUPABASE_URL + CFG.SUPABASE_ANON_KEY);
+  if ((senzaChiavi || /[?&]prova\b/.test(location.search)) && window.creaClientProva){
+    S.sb = window.creaClientProva(); S.prova = true;
+    banner("MODALITÀ PROVA: nessun login, i dati restano solo in questo browser. Inserisci le chiavi Supabase in wildix/js/config.js per usarlo davvero. ");
+    const az = document.createElement("button"); az.className = "btn sm"; az.type = "button"; az.textContent = "Azzera dati di prova";
+    az.addEventListener("click", () => confirmBox("Azzerare i dati di prova?", "Offerte, clienti, listini e impostazioni salvati in questo browser vengono cancellati.", "Azzera", () => { S.sb.azzera(); lsSet(draftKey(), null); S.dirty = false; location.reload(); }, true));
+    $("#banner").appendChild(az); $("#bEsci").hidden = true;
+    return startApp({id:"prova", email:"prova@locale"});
+  }
+  if (!window.supabase){ $("#loginRoot").hidden = false; $("#fLogin").hidden = true; $("#loginIntro").textContent = "Impossibile caricare i componenti: controlla la connessione e ricarica la pagina."; return; }
+  S.sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, storageKey:"wx-prev-auth"}});
+  S.sb.auth.onAuthStateChange(ev => { if (ev === "PASSWORD_RECOVERY") showNuovaPwd(); });
+  const {data:{session}} = await S.sb.auth.getSession();
+  if (session && vuolePassword) return showNuovaPwd();
+  if (session) return startApp(session.user);
+  showLogin(/error_description=/.test(flowHash) ? "Il link non è più valido: usa “Password dimenticata?”." : "");
+}
+window.addEventListener("beforeunload", e => { if (S.dirty && S.offer){ lsSet(draftKey(), S.offer); e.preventDefault(); e.returnValue = ""; } });
+boot();
+})();
