@@ -732,14 +732,15 @@ function paperHtml(o){
   const k = calc(o), P = o.parametri, az = S.settings.azienda;
   const periodiUsati = PERIODI.filter(([p]) => k.rows.some(c => !c.sez && c.filled && c.p === p));
   const colPer = periodiUsati.length > 1;
-  const cols = 1 + (P.codici?1:0) + 1 + (P.listino?2:0) + (P.unit?1:0) + 1 + (colPer?1:0);
+  const colUm = o.righe.some((r,i) => r.tipo !== "sez" && k.rows[i].filled && String(r.um||"").trim());
+  const cols = 1 + (P.codici?1:0) + (colUm?1:0) + 1 + (P.listino?2:0) + (P.unit?1:0) + 1 + (colPer?1:0);
   const body = o.righe.map((r,i) => {
     const c = k.rows[i];
     if (r.tipo === "sez") return r.descr ? `<tr class="sez"><td colspan="${cols}">${esc(r.descr)}</td></tr>` : "";
     if (!c.filled) return "";
     const en = P.en && r.descrEn && r.descrEn !== r.descr ? `<span class="en">${esc(r.descrEn)}</span>` : "";
     const sc = haListino(r) && num(r.listino) ? (1 - c.prezzo/num(r.listino))*100 : 0;
-    return `<tr>${P.codici?`<td>${esc(r.codice)}</td>`:""}<td>${esc(r.descr).replace(/\n/g,"<br>")}${en}</td><td class="c">${n2(c.qta)}${r.um?" "+esc(r.um):""}</td>
+    return `<tr>${P.codici?`<td>${esc(r.codice)}</td>`:""}<td>${esc(r.descr).replace(/\n/g,"<br>")}${en}</td>${colUm?`<td class="c">${esc(r.um||"")}</td>`:""}<td class="c">${n2(c.qta)}</td>
       ${P.listino?`<td class="r">${haListino(r)?fmtI.format(num(r.listino))+" €":""}</td><td class="r">${sc>0.004?n2(sc)+"%":""}</td>`:""}
       ${P.unit?`<td class="r">${fmtI.format(c.prezzo)} €</td>`:""}<td class="r">${eur(c.tot)}</td>${colPer?`<td class="c">${PER_LAB[c.p]}</td>`:""}</tr>`;
   }).join("");
@@ -748,7 +749,7 @@ function paperHtml(o){
   const cond = [["Validità offerta", c.validita ? fmtDate(addDays(o.data, c.validita)) : ""], ["Pagamento", c.pagamento], ["Consegna / attivazione", c.consegna],
     canoni ? ["Durata contratto canoni", c.durata] : null, ["Garanzia", c.garanzia], ["IVA", c.iva]].filter(x => x && x[1]);
   return `<div class="paper">${testata(az)}${testataOfferta(o, "OFFERTA")}
-    <table class="pr"><thead><tr>${P.codici?"<th>Codice</th>":""}<th>Descrizione</th><th>Q.tà</th>${P.listino?"<th>Listino</th><th>Sconto</th>":""}${P.unit?"<th>Prezzo unit.</th>":""}<th>Totale</th>${colPer?"<th>Periodicità</th>":""}</tr></thead>
+    <table class="pr"><thead><tr>${P.codici?"<th>Codice</th>":""}<th>Descrizione</th>${colUm?"<th>U.M.</th>":""}<th>Q.tà</th>${P.listino?"<th>Listino</th><th>Sconto</th>":""}${P.unit?"<th>Prezzo unit.</th>":""}<th>Totale</th>${colPer?"<th>Periodicità</th>":""}</tr></thead>
     <tbody>${body || `<tr><td colspan="${cols}" class="c">Nessuna riga compilata</td></tr>`}</tbody></table>
     <table class="tots">${tot || `<tr><td>Totale</td><td class="r">${eur(0)}</td></tr>`}</table>
     ${cond.length ? `<h3 style="margin:18px 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.05em">Condizioni di fornitura</h3><table class="cond">${cond.map(([a,b])=>`<tr><td>${esc(a)}</td><td>${esc(b)}</td></tr>`).join("")}</table>` : ""}
