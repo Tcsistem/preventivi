@@ -337,17 +337,35 @@ $("#selPreset").addEventListener("change", e => {
 });
 
 /* ---------------------------------------------------------------- quadro economico */
+const FATT = {m:{"1m":1,"1y":1/12,"5y":1/60}, a:{"1m":12,"1y":1,"5y":1/5}};
+function canone(k, vista){
+  const f = FATT[vista], o = {ricavo:0, costo:0, interni:0};
+  for (const p in f){ const g = k.per[p]; o.ricavo += g.ricavo*f[p]; o.costo += g.costo*f[p]; o.interni += g.interni*f[p]; }
+  o.costoTot = o.costo + o.interni; o.marg = o.ricavo - o.costoTot; return o;
+}
 function update(){
   const k = aggiornaCelle();
-  const righe = PERIODI.filter(([p]) => k.per[p].ricavo || k.per[p].costoTot);
-  $("#quadro").innerHTML = (righe.length ? `<table class="qt"><thead><tr><th></th><th>Cliente</th><th>Costo a me</th><th>Margine</th></tr></thead><tbody>
-    ${righe.map(([p,l]) => { const g = k.per[p]; return `<tr><td>${l}</td><td>${eur(g.ricavo)}</td><td title="${g.interni?"di cui costi interni "+eur(g.interni):""}">${eur(g.costoTot)}${g.interni?"*":""}</td><td class="m${g.marg<0?" neg":""}">${eur(g.marg)}</td></tr>`; }).join("")}
-    </tbody></table>${righe.some(([p])=>k.per[p].interni)?`<div class="hint" style="margin-top:4px">* compresi i costi interni: ${righe.filter(([p])=>k.per[p].interni).map(([p,l])=>l.toLowerCase()+" "+eur(k.per[p].interni)).join(", ")}</div>`:""}` : `<p class="hint">Aggiungi righe per vedere i conti.</p>`) + `
-    <div class="big"><div><div class="lab">Valore primo anno</div><div class="val">${eur(k.ricavo1)}</div></div>
-    <div class="guad${k.marg1<0?" neg":""}"><div class="lab">Margine primo anno</div><div class="val">${eur(k.marg1)}</div><div class="hint">${n2(k.perc1)}% sul venduto · costi ${eur(k.costo1)}</div></div></div>
-    <p class="hint" style="margin:8px 0 0">Primo anno = una tantum + 12 × mensile + annuale + 5 anni (pagati anticipati).</p>`;
+  const vista = S.offer.parametri.vista === "a" ? "a" : "m";
+  const U = k.per[""], C = canone(k, vista), lab = vista === "m" ? "Canone mensile" : "Canone annuale";
+  const haCan = C.ricavo || C.costoTot, haUna = U.ricavo || U.costoTot;
+  const misti = ["1m","1y","5y"].filter(p => k.per[p].ricavo || k.per[p].costoTot).length > 1 || (vista==="m" && (k.per["1y"].ricavo||k.per["5y"].ricavo)) || (vista==="a" && (k.per["1m"].ricavo||k.per["5y"].ricavo));
+  const pc = (m, r) => r ? ` <small>(${n2(m/r*100)}%)</small>` : "";
+  const riga = (l, v, cls="") => `<div class="qr ${cls}"><span>${l}</span><b>${eur(v)}</b></div>`;
+  const box = (tit, cls, una, can, extra="") => `<div class="qbox ${cls}"><div class="lab">${tit}</div>${haUna?riga("Una tantum", una):""}${haCan?riga(lab, can):""}${extra}</div>`;
+  $("#quadro").innerHTML = (haUna || haCan) ? `
+    <div class="seg qseg" role="group" aria-label="Canoni"><button type="button" data-v="m" aria-pressed="${vista==="m"}">Mensile</button><button type="button" data-v="a" aria-pressed="${vista==="a"}">Annuale</button></div>
+    ${box("Il cliente paga", "cli", U.ricavo, C.ricavo)}
+    ${box("I miei costi", "costi", U.costoTot, C.costoTot,
+      (U.interni || C.interni) ? `<div class="qdett">Articoli (Gold): ${haUna?eur(U.costo):""}${haUna&&haCan?" + ":""}${haCan?eur(C.costo)+(vista==="m"?"/mese":"/anno"):""}<br>Costi interni: ${haUna?eur(U.interni):""}${haUna&&haCan?" + ":""}${haCan?eur(C.interni)+(vista==="m"?"/mese":"/anno"):""}</div>` : "")}
+    <div class="qbox marg${(U.marg<0||C.marg<0)?" neg":""}"><div class="lab">Il mio margine</div>
+      ${haUna?`<div class="qr"><span>Una tantum</span><b>${eur(U.marg)}${pc(U.marg,U.ricavo)}</b></div>`:""}
+      ${haCan?`<div class="qr"><span>${lab}</span><b>${eur(C.marg)}${pc(C.marg,C.ricavo)}</b></div>`:""}</div>
+    ${misti?`<p class="hint" style="margin:6px 0 0">Canoni con periodi diversi riportati ${vista==="m"?"al mese (annuale ÷ 12, 5 anni ÷ 60)":"all'anno (mensile × 12, 5 anni ÷ 5)"}.</p>`:""}
+    <div class="qbox anno"><div class="lab">Primo anno</div>${riga("Valore", k.ricavo1)}${riga("Costi", k.costo1)}<div class="qr"><span>Margine</span><b>${eur(k.marg1)}${pc(k.marg1,k.ricavo1)}</b></div></div>`
+  : `<p class="hint">Aggiungi righe per vedere i conti.</p>`;
   return k;
 }
+$("#quadro").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (!b) return; S.offer.parametri.vista = b.dataset.v; update(); markDirty(); });
 
 /* ---------------------------------------------------------------- salvataggio */
 function toRow(o){

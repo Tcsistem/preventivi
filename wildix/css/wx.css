@@ -72,3 +72,18 @@ table.righe.wx input.w60{width:54px} table.righe.wx input.w80{width:74px}
 .paper .interno{background:#fff3c4;border:1px solid #c9a227;text-align:center;font-weight:700;letter-spacing:.1em;padding:4px;margin:10px 0;font-family:var(--f-head)}
 .paper table.pr td.g{background:#fffbea}
 @media print{.paper table.pr tr.sez td,.paper .interno,.paper table.pr td.g{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+
+/* quadro economico a riquadri */
+.qseg{display:flex;margin-bottom:10px}.qseg button{flex:1}
+.qbox{border-radius:6px;padding:10px 12px;background:var(--surface-2);margin-top:8px;border-left:4px solid var(--line)}
+.qbox .lab{font-family:var(--f-head);text-transform:uppercase;letter-spacing:.05em;font-size:12px;color:var(--muted);margin-bottom:4px}
+.qr{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:2px 0;font-variant-numeric:tabular-nums}
+.qr b{font-family:var(--f-head);font-size:18px;white-space:nowrap}
+.qr b small{font-size:12px;color:var(--muted);font-weight:600}
+.qbox.cli{border-left-color:var(--navy)}
+.qbox.costi{border-left-color:#c9a227;background:var(--int)}
+.qbox.costi .qr b{color:var(--int-ink)}
+.qbox.marg{border-left-color:var(--good)} .qbox.marg .qr b{color:var(--good)}
+.qbox.marg.neg{border-left-color:var(--accent)} .qbox.marg.neg .qr b{color:var(--accent)}
+.qbox.anno .qr b{font-size:15px}
+.qdett{font-size:11px;color:var(--int-ink);margin-top:4px;line-height:1.4}
