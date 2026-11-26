@@ -65,7 +65,7 @@ table.righe.wx input.w60{width:54px} table.righe.wx input.w80{width:74px}
 .qt tr.tot td{font-weight:700;border-top:2px solid var(--line)}
 
 /* foglio stampa */
-.paper .logo{max-height:56px;max-width:220px}
+.paper .logo{max-height:76px;max-width:220px}
 .paper table.pr td .en{display:block;color:#666;font-size:10px}
 .paper table.pr tr.sez td{background:#eef3f9;font-weight:700;font-family:var(--f-head);text-transform:uppercase;letter-spacing:.05em;font-size:12px}
 .paper .note{margin-top:12px;white-space:pre-line;font-size:11.5px}
@@ -94,3 +94,6 @@ table.righe.wx td.in select.modo{min-width:0;width:100%;font-size:11px;padding:1
 .paper .ph{border-bottom-color:#f08a00}
 .paper .ph .az{color:#f08a00}
 @media print{.paper .ph{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+
+.brand{align-items:center}.brand .blogo{height:30px;width:auto}
+.brand h1 b{color:#f08a00}

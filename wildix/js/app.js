@@ -7,7 +7,7 @@ const PER_LAB = Object.fromEntries(PERIODI);
 const PER_ANNO1 = {"":1,"1m":12,"1y":1,"5y":1};
 const PER_STAMPA = {"":"Totale una tantum","1m":"Canone mensile","1y":"Canone annuale","5y":"Canone 5 anni (anticipato)"};
 const DEFAULT_SET = {
-  azienda:{nome:"TC SISTEM S.N.C.", tel:"", logo:"", dettagli:"Indirizzo – CAP Città (LT)\nP.IVA 00000000000\namministrazione@tcsistem.it"},
+  azienda:{nome:"TC Sistem", tel:"", logo:"img/logo-tcsistem.png", dettagli:"Indirizzo – CAP Città (LT)\nP.IVA 00000000000\namministrazione@tcsistem.it"},
   sconto:0, ricarico:30, versione:"",
   cond:{validita:30, pagamento:"Bonifico bancario 30 gg d.f.", consegna:"Da concordare", durata:"36 mesi per i servizi a canone",
         iva:"Esclusa (aliquota di legge)", garanzia:"Secondo le condizioni del produttore", note:""},
