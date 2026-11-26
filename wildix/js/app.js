@@ -156,16 +156,24 @@ function newOffer(){
     righe:[], costi:[], condizioni:clone(s.cond), isNew:true, updatedAt:null };
 }
 const haListino = r => num(r.listino) > 0;
+// modo della %: "sc" = sconto sul listino End User, "ric" = ricarico sul mio costo (Gold)
+const modoDi = r => (r.modo === "ric" || !haListino(r)) ? "ric" : (r.modo === "sc" ? "sc" : "sc");
 function ricalcolaPrezzo(r){
   if (r.tipo === "sez") return;
   const p = num(r.perc);
-  r.prezzo = haListino(r) ? r2(num(r.listino) * (1 - p/100)) : r2(num(r.costo) * (1 + p/100));
+  r.prezzo = modoDi(r) === "sc" ? r2(num(r.listino) * (1 - p/100)) : r2(num(r.costo) * (1 + p/100));
 }
 function ricalcolaPerc(r){
   const pz = num(r.prezzo);
-  if (haListino(r)) r.perc = r2((1 - pz/num(r.listino)) * 100);
+  if (modoDi(r) === "sc") r.perc = r2((1 - pz/num(r.listino)) * 100);
   else if (num(r.costo) > 0) r.perc = r2((pz/num(r.costo) - 1) * 100);
   else r.perc = "";
+}
+function modoSel(r){
+  const m = modoDi(r);
+  return `<select data-k="modo" class="modo" title="Come si calcola il prezzo">
+    <option value="sc"${m==="sc"?" selected":""}${haListino(r)?"":" disabled"}>sconto</option>
+    <option value="ric"${m==="ric"?" selected":""}>ricarico</option></select>`;
 }
 function calc(o){
   const per = {}; PERIODI.forEach(([p]) => per[p] = {ricavo:0, costo:0, interni:0});
@@ -249,7 +257,7 @@ function rigaHtml(r, i){
     <td class="in"><input class="n w60" data-k="qta" inputmode="decimal" value="${esc(inN(r.qta))}"></td>
     <td class="in int"><input class="n w80" data-k="costo" inputmode="decimal" value="${esc(inN(r.costo))}"></td>
     <td class="in"><input class="n w80" data-k="listino" inputmode="decimal" value="${esc(inN(r.listino))}" placeholder="—"></td>
-    <td class="in"><input class="n w60" data-k="perc" inputmode="decimal" value="${esc(inN(r.perc))}" title="${haListino(r)?"Sconto % sul listino":"Ricarico % sul costo"}"><div class="hint" data-o="pl" style="text-align:right">${haListino(r)?"sconto":"ricarico"}</div></td>
+    <td class="in"><input class="n w60" data-k="perc" inputmode="decimal" value="${esc(inN(r.perc))}" title="${modoDi(r)==="sc"?"Sconto % sul listino":"Ricarico % sul costo"}">${modoSel(r)}</td>
     <td class="in"><input class="n w80" data-k="prezzo" inputmode="decimal" value="${esc(inN(r.prezzo))}"></td>
     <td class="c tot" data-o="tot"></td><td class="c int" data-o="marg"></td></tr>`;
 }
@@ -281,12 +289,21 @@ $("#tbRighe").addEventListener("input", e => {
     }
   }
   if (key === "costo" || key === "listino") r.auto = false;           // prezzi toccati a mano: niente più cambio fascia automatico
-  if (key === "perc" || key === "listino" || (key === "costo" && !haListino(r))){ ricalcolaPrezzo(r); setInput(tr,"prezzo",r.prezzo); }
+  if (key === "perc" || (key === "listino" && modoDi(r) === "sc") || (key === "costo" && modoDi(r) === "ric")){ ricalcolaPrezzo(r); setInput(tr,"prezzo",r.prezzo); }
   if (key === "prezzo"){ ricalcolaPerc(r); setInput(tr,"perc",r.perc); }
-  const pl = $('[data-o="pl"]', tr); if (pl) pl.textContent = haListino(r) ? "sconto" : "ricarico";
+  if (key === "listino"){ const sel = $('[data-k="modo"]', tr); if (sel && sel !== document.activeElement) sel.outerHTML = modoSel(r); }
   update(); markDirty();
 });
-$("#tbRighe").addEventListener("change", e => { if (e.target.tagName === "SELECT"){ const tr=e.target.closest("tr[data-i]"); S.offer.righe[+tr.dataset.i].periodo = e.target.value; update(); markDirty(); } });
+$("#tbRighe").addEventListener("change", e => {
+  if (e.target.tagName !== "SELECT") return;
+  const tr = e.target.closest("tr[data-i]"), r = S.offer.righe[+tr.dataset.i];
+  if (e.target.dataset.k === "modo"){
+    // cambio sconto <-> ricarico: la % che hai scritto resta e si ricalcola il prezzo con il nuovo modo
+    r.modo = e.target.value; ricalcolaPrezzo(r); setInput(tr,"prezzo",r.prezzo);
+    const pc = $('[data-k="perc"]', tr); if (pc) pc.title = r.modo==="sc" ? "Sconto % sul listino" : "Ricarico % sul costo";
+  } else r.periodo = e.target.value;
+  update(); markDirty();
+});
 $("#tbRighe").addEventListener("click", e => {
   const b = e.target.closest("[data-a]"); if (!b) return;
   const i = +b.closest("tr").dataset.i, R = S.offer.righe;
@@ -306,12 +323,12 @@ $("#gSconto").addEventListener("input", e => { S.offer.parametri.sconto = num(e.
 $("#gRicarico").addEventListener("input", e => { S.offer.parametri.ricarico = num(e.target.value); markDirty(); });
 $("#bApplSconto").addEventListener("click", () => {
   const sc = num($("#gSconto").value); let n = 0;
-  S.offer.righe.forEach(r => { if (r.tipo !== "sez" && haListino(r) && r.fonte !== "PERSONALE"){ r.perc = sc; ricalcolaPrezzo(r); n++; } });
+  S.offer.righe.forEach(r => { if (r.tipo !== "sez" && haListino(r) && r.fonte !== "PERSONALE"){ r.modo = "sc"; r.perc = sc; ricalcolaPrezzo(r); n++; } });
   renderRighe(); update(); markDirty(); toast(`Sconto ${n2(sc)}% applicato a ${n} righe`);
 });
 $("#bApplRic").addEventListener("click", () => {
   const ric = num($("#gRicarico").value); let n = 0;
-  S.offer.righe.forEach(r => { if (r.tipo !== "sez" && num(r.costo) > 0){ r.prezzo = r2(num(r.costo)*(1+ric/100)); ricalcolaPerc(r); n++; } });
+  S.offer.righe.forEach(r => { if (r.tipo !== "sez" && num(r.costo) > 0){ r.modo = "ric"; r.perc = ric; ricalcolaPrezzo(r); n++; } });
   renderRighe(); update(); markDirty(); toast(`Prezzi = costo + ${n2(ric)}% su ${n} righe`);
 });
 
