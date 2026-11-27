@@ -6,8 +6,8 @@
 <title>TC Sistem Preventivi</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="../css/app.css?v=202611270930">
-<link rel="stylesheet" href="css/wx.css?v=202611270930">
+<link rel="stylesheet" href="../css/app.css?v=202611270953">
+<link rel="stylesheet" href="css/wx.css?v=202611270953">
 </head>
 <body>
 
@@ -202,11 +202,11 @@
       <div class="sp row">
         <input class="inp search" id="qCli" type="search" placeholder="Cerca nome, città, P.IVA">
         <button class="btn" id="bNuovoCli" type="button">+ Nuovo</button>
-        <label class="btn" style="cursor:pointer">Importa CSV<input type="file" id="fCsv" accept=".csv,text/csv" hidden></label>
+        <label class="btn" style="cursor:pointer">Importa Excel / CSV<input type="file" id="fCsv" accept=".csv,.xlsx,.xls,text/csv" hidden></label>
       </div>
     </div>
     <div id="cliList"></div>
-    <p class="hint">CSV con intestazioni (separatore ; o ,): ragione sociale, indirizzo, cap, città, provincia, partita iva, email, pec, sdi, telefono, referente.</p>
+    <p class="hint">File Excel (.xlsx) o CSV con le intestazioni nella prima riga: ragione sociale / denominazione, indirizzo, cap, comune, provincia, partita iva, codice fiscale, email, pec, codice sdi, telefono, referente. Va bene anche l'export della lista clienti del gestionale. Stessa P.IVA = aggiornamento.</p>
   </div>
 </section>
 
@@ -296,8 +296,8 @@
 <div id="printArea"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="js/config.js?v=202611270930"></script>
-<script src="js/prova.js?v=202611270930"></script>
-<script src="js/app.js?v=202611270930"></script>
+<script src="js/config.js?v=202611270953"></script>
+<script src="js/prova.js?v=202611270953"></script>
+<script src="js/app.js?v=202611270953"></script>
 </body>
 </html>

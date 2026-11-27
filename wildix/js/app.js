@@ -490,7 +490,7 @@ function renderClienti(){
   const L = S.clienti.filter(c => !q || [c.rs,c.citta,c.piva,c.ref].join(" ").toLowerCase().includes(q)).slice(0,300);
   $("#cliList").innerHTML = L.length ? `<table class="list"><thead><tr><th>Ragione sociale</th><th>Città</th><th>P.IVA</th><th>Referente</th><th>Contatti</th></tr></thead><tbody>
     ${L.map(c=>`<tr class="click" data-id="${esc(c.id)}"><td><b>${esc(c.rs)}</b></td><td>${esc([c.citta,c.prov&&"("+c.prov+")"].filter(Boolean).join(" "))}</td><td>${esc(c.piva)}</td><td>${esc(c.ref)}</td><td class="hint">${esc([c.tel,c.email].filter(Boolean).join(" · "))}</td></tr>`).join("")}</tbody></table>`
-    : `<div class="empty"><b>${q?"Nessun cliente trovato":"Nessun cliente"}</b>Aggiungili con “+ Nuovo” o importa un CSV. Puoi anche scrivere il nome direttamente nell'offerta.</div>`;
+    : `<div class="empty"><b>${q?"Nessun cliente trovato":"Nessun cliente"}</b>Aggiungili con “+ Nuovo” o importa un file Excel/CSV. Puoi anche scrivere il nome direttamente nell'offerta.</div>`;
 }
 $("#qCli").addEventListener("input", renderClienti);
 $("#cliList").addEventListener("click", e => { const tr=e.target.closest("tr[data-id]"); if (tr) editCliente(S.clienti.find(c=>c.id===tr.dataset.id)); });
@@ -521,17 +521,31 @@ function parseCSV(t){
 }
 $("#fCsv").addEventListener("change", async e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
-  const rows = parseCSV(await f.text()); if (rows.length < 2) return toast("File vuoto");
-  const norm = s => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z]/g,"");
-  const MAP = {rs:["ragionesociale","rs","cliente","nome","denominazione","ragsoc"], ind:["indirizzo","via"], cap:["cap"], citta:["citta","comune","localita"], prov:["provincia","prov","pr"],
-    piva:["partitaiva","piva","pi","codicefiscale","cf","pivacf"], email:["email","mail"], pec:["pec"], sdi:["sdi","codicesdi","codicedestinatario"], tel:["telefono","tel","cellulare"], ref:["referente","contatto","attenzione"]};
-  const head = rows[0].map(norm); const idx = {};
-  for (const k in MAP){ const j = head.findIndex(h => MAP[k].includes(h)); if (j >= 0) idx[k] = j; }
-  if (idx.rs === undefined) return toast("Colonna 'ragione sociale' non trovata");
-  const esist = new Map(S.clienti.map(c => [(c.piva||c.rs).toLowerCase(), c.id]));
-  const out = rows.slice(1).map(r => { const c = {}; CLI_KEYS.forEach(k => c[k] = idx[k]!==undefined ? String(r[idx[k]]||"").trim() : ""); c.id = esist.get((c.piva||c.rs).toLowerCase()) || uid(); return c; }).filter(c => c.rs);
-  for (let i=0;i<out.length;i+=500){ const {error} = await S.sb.from("wx_clienti").upsert(out.slice(i,i+500)); if (error) return toast(errMsg(error)); }
-  await loadClienti(); toast(`${out.length} clienti importati`);
+  try{
+    const rows = await righeDaFile(f); if (rows.length < 2) return toast("Il file è vuoto");
+    const norm = s => String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z]/g,"");
+    const MAP = {rs:["ragionesociale","rs","cliente","nome","denominazione","ragsoc","nominativo"], ind:["indirizzo","via","indirizzosede"], cap:["cap"], citta:["citta","comune","localita"], prov:["provincia","prov","pr"],
+      piva:["partitaiva","piva","pi","pivataxid","pivacf","partitaivacodicefiscale"], cf:["codicefiscale","cf"], email:["email","mail","indirizzoemail","emailaddress"], pec:["pec","indirizzopec","emailpec"],
+      sdi:["sdi","codicesdi","codicedestinatario"], tel:["telefono","tel","cellulare","telefono1"], ref:["referente","contatto","attenzione"]};
+    const head = rows[0].map(norm); const idx = {};
+    for (const k in MAP){ const j = head.findIndex(h => MAP[k].includes(h)); if (j >= 0) idx[k] = j; }
+    if (idx.rs === undefined) return toast("Colonna 'ragione sociale' o 'denominazione' non trovata nella prima riga");
+    const pulisci = v => String(v ?? "").trim().replace(/^"+|"+$/g, "").replace(/\s{2,}/g, " ").trim();
+    const chiave = c => (c.piva || c.rs).toLowerCase();
+    const esist = new Map(S.clienti.map(c => [chiave(c), c.id]));
+    const visti = new Set();
+    const out = rows.slice(1).map(r => {
+      const g = k => idx[k] !== undefined ? pulisci(r[idx[k]]) : "";
+      const c = {}; CLI_KEYS.forEach(k => c[k] = g(k));
+      if (!c.piva) c.piva = g("cf");
+      if (/^\d{4}$/.test(c.cap)) c.cap = "0" + c.cap;          // Excel toglie lo zero iniziale (04100 -> 4100)
+      c.prov = c.prov.toUpperCase().slice(0, 4);
+      c.id = esist.get(chiave(c)) || uid(); return c;
+    }).filter(c => c.rs && !visti.has(chiave(c)) && visti.add(chiave(c)));
+    const agg = out.filter(c => esist.has(chiave(c))).length;
+    for (let i=0;i<out.length;i+=500){ const {error} = await S.sb.from("wx_clienti").upsert(out.slice(i,i+500)); if (error) throw error; }
+    await loadClienti(); toast(`${out.length - agg} clienti nuovi, ${agg} aggiornati`);
+  }catch(err){ toast(errMsg(err)); }
 });
 
 /* ---------------------------------------------------------------- listini */
@@ -632,7 +646,7 @@ function editArticolo(a, base){
 }
 function loadSheetJS(){
   if (window.XLSX) return Promise.resolve(window.XLSX);
-  return new Promise((res, rej) => { const s=document.createElement("script"); s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+  return new Promise((res, rej) => { const s=document.createElement("script"); s.src="js/vendor/xlsx.full.min.js";
     s.onload=()=>res(window.XLSX); s.onerror=()=>rej(new Error("Libreria per i file Excel non raggiungibile")); document.head.appendChild(s); });
 }
 async function righeDaFile(file){
