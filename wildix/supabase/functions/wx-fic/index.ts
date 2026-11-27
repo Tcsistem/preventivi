@@ -68,12 +68,22 @@ Deno.serve(async (req) => {
       country: "Italia", email: cli?.email || "", certified_email: cli?.pec || "", ei_code: cli?.sdi || "", phone: cli?.tel || "",
     };
     let entityId: number | null = null, clienteCreato = false;
-    const q = piva ? `vat_number = '${piva}'` : (cf ? `tax_code = '${cf}'` : `name = '${nome.replace(/'/g, "''")}'`);
-    const found = await fic(`/c/${comp.id}/entities/clients?fieldset=basic&per_page=5&q=${encodeURIComponent(q)}`);
-    if (found?.data?.length) entityId = found.data[0].id;
+    // ricerca nella rubrica: prima per P.IVA, poi per codice fiscale (enti, scuole, privati), infine per nome esatto
+    const cerca = async (q: string) => (await fic(`/c/${comp.id}/entities/clients?fieldset=basic&per_page=5&q=${encodeURIComponent(q)}`))?.data?.[0]?.id ?? null;
+    const prove: string[] = [];
+    if (piva) prove.push(`vat_number = '${piva}'`, `tax_code = '${piva}'`);
+    if (cf && cf !== piva) prove.push(`tax_code = '${cf}'`);
+    prove.push(`name = '${nome.replace(/'/g, "''")}'`);
+    for (const q of prove) { entityId = await cerca(q); if (entityId) break; }
+    if (entityId) { /* trovato */ }
     else if (!prova) {
-      const created = await fic(`/c/${comp.id}/entities/clients`, { method: "POST", body: JSON.stringify({ data: { ...anag, type: piva ? "company" : "person" } }) });
-      entityId = created?.data?.id ?? null; clienteCreato = true;
+      try {
+        const created = await fic(`/c/${comp.id}/entities/clients`, { method: "POST", body: JSON.stringify({ data: { ...anag, type: piva ? "company" : "person" } }) });
+        entityId = created?.data?.id ?? null; clienteCreato = true;
+      } catch (e) {
+        // già presente in rubrica ma non trovato dalla ricerca (es. dati scritti in modo diverso): la proforma riporta comunque i dati del cliente
+        if (!/\(409\)/.test((e as Error).message)) throw e;
+      }
     }
 
     // ---- IVA 22%
