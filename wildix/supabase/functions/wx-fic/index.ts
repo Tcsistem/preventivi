@@ -47,7 +47,9 @@ Deno.serve(async (req) => {
     const { azione, offerta_id } = await req.json();
     const comp = await companyId();
     if (azione === "test") return json({ ok: true, azienda: comp.name, company_id: comp.id });
-    if (azione !== "proforma" || !offerta_id) return json({ errore: "Richiesta non valida." }, 400);
+    // "verifica": prepara tutto (cliente, IVA, righe, totali) senza creare nulla in Fatture in Cloud
+    const prova = azione === "verifica";
+    if ((azione !== "proforma" && !prova) || !offerta_id) return json({ errore: "Richiesta non valida." }, 400);
 
     const { data: o, error } = await sb.from("wx_offerte").select("*").eq("id", offerta_id).maybeSingle();
     if (error || !o) return json({ errore: "Offerta non trovata: salvala prima di creare la proforma." }, 404);
@@ -69,7 +71,7 @@ Deno.serve(async (req) => {
     const q = piva ? `vat_number = '${piva}'` : (cf ? `tax_code = '${cf}'` : `name = '${nome.replace(/'/g, "''")}'`);
     const found = await fic(`/c/${comp.id}/entities/clients?fieldset=basic&per_page=5&q=${encodeURIComponent(q)}`);
     if (found?.data?.length) entityId = found.data[0].id;
-    else {
+    else if (!prova) {
       const created = await fic(`/c/${comp.id}/entities/clients`, { method: "POST", body: JSON.stringify({ data: { ...anag, type: piva ? "company" : "person" } }) });
       entityId = created?.data?.id ?? null; clienteCreato = true;
     }
@@ -99,6 +101,7 @@ Deno.serve(async (req) => {
     const tot = await fic(`/c/${comp.id}/issued_documents/totals`, { method: "POST", body: JSON.stringify({ data: doc }) });
     const dovuto = tot?.data?.amount_due ?? tot?.data?.amount_gross;
     doc.payments_list = [{ amount: dovuto, due_date: oggi, status: "not_paid" }];
+    if (prova) return json({ ok: true, prova: true, cliente_trovato: !!entityId, totale: dovuto, righe: items.length, documento: doc });
     const res = await fic(`/c/${comp.id}/issued_documents`, { method: "POST", body: JSON.stringify({ data: doc }) });
     const d = res?.data || {};
     return json({ ok: true, id: d.id, numero: d.number != null ? `${d.number}${d.numeration || ""}` : "", data: d.date, url: d.url || "",
