@@ -62,9 +62,9 @@
         return {data:[...m].map(([k,n])=>{ const [versione,listino]=k.split("|"); return {versione, listino, righe:n}; }), error:null};
       }
       if (fn==="wx_prossimo_numero"){
-        const y=new Date().getFullYear(); let m=0;
-        DB.wx_offerte.forEach(o=>{ const x=String(o.numero).match(/^W(\d{4})\/(\d+)$/); if(x&&+x[1]===y) m=Math.max(m,+x[2]); });
-        return {data:`W${y}/${String(m+1).padStart(3,"0")}`, error:null};
+        const yy=String(new Date().getFullYear()).slice(2); let m=0;
+        DB.wx_offerte.forEach(o=>{ const x=String(o.numero).match(/^P(\d+)-(\d{2})$/); if(x&&x[2]===yy) m=Math.max(m,+x[1]); });
+        return {data:`P${String(m+1).padStart(3,"0")}-${yy}`, error:null};
       }
       return {data:null, error:{message:"rpc sconosciuta "+fn}};
     },

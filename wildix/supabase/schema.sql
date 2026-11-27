@@ -151,12 +151,12 @@ create trigger wx_trg_offerte before update on public.wx_offerte for each row ex
 drop trigger if exists wx_trg_impostazioni on public.wx_impostazioni;
 create trigger wx_trg_impostazioni before update on public.wx_impostazioni for each row execute function public.wx_tocca_autore();
 
--- prossimo numero offerta dell'anno (es. W2026/004)
+-- prossimo numero offerta dell'anno (es. P004-26): ricomincia da P001 ogni anno
 create or replace function public.wx_prossimo_numero(anno int default extract(year from current_date)::int)
 returns text language sql stable as $$
-  select 'W' || anno::text || '/' || lpad((coalesce(max(nullif(split_part(numero, '/', 2), '')::int), 0) + 1)::text, 3, '0')
+  select 'P' || lpad((coalesce(max(substring(numero from '^P([0-9]+)-')::int), 0) + 1)::text, 3, '0') || '-' || right(anno::text, 2)
   from public.wx_offerte
-  where numero ~ ('^W' || anno::text || '/[0-9]+$');
+  where numero ~ ('^P[0-9]+-' || right(anno::text, 2) || '$');
 $$;
 
 -- elenco versioni di listino presenti con numero righe

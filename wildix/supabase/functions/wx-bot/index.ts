@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
 
       let numero = "", res: any = null;
       for (let tent = 0; tent < 3; tent++) {
-        numero = (await sb.rpc("wx_prossimo_numero")).data || ("W" + new Date().getFullYear() + "/R" + Date.now());
+        numero = (await sb.rpc("wx_prossimo_numero")).data || ("P" + Date.now() + "-" + String(new Date().getFullYear()).slice(2));
         res = await sb.from("wx_offerte").insert({
           numero, data: new Date().toISOString().slice(0, 10), stato: "Richiesta", cliente_id: cli?.id || null, cliente: nomeCliente, cliente_blocco: blocco,
           attenzione: cli?.ref || "", redatto: venditore, oggetto, versione_listino: versione,

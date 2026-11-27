@@ -144,10 +144,11 @@ $("#artRes").addEventListener("click", e => {
 });
 
 /* ---------------------------------------------------------------- offerta: modello e calcoli */
+// numerazione: P001-26, P002-26, … (ricomincia da P001 ogni anno)
 function nextNumero(){
-  const y = new Date().getFullYear(); let max = 0;
-  S.offerte.forEach(o => { const m = String(o.numero||"").match(/^W(\d{4})\/(\d+)$/); if (m && +m[1]===y) max = Math.max(max, +m[2]); });
-  return `W${y}/${String(max+1).padStart(3,"0")}`;
+  const yy = String(new Date().getFullYear()).slice(2); let max = 0;
+  S.offerte.forEach(o => { const m = String(o.numero||"").match(/^P(\d+)-(\d{2})$/); if (m && m[2]===yy) max = Math.max(max, +m[1]); });
+  return `P${String(max+1).padStart(3,"0")}-${yy}`;
 }
 function newOffer(){
   const s = S.settings;
