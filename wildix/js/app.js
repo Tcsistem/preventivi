@@ -771,7 +771,7 @@ function paperHtml(o){
       const tit = sez && sez !== ultima ? `<tr class="sez"><td colspan="${cols}">${esc(sez)}</td></tr>` : ""; ultima = sez;
       const en = P.en && r.descrEn && r.descrEn !== r.descr ? `<span class="en">${esc(r.descrEn)}</span>` : "";
       return tit + `<tr>${P.codici?`<td>${esc(r.codice)}</td>`:""}<td>${esc(r.descr).replace(/\n/g,"<br>")}${en}</td><td class="c">${n2(c.qta)}</td>
-        ${unit?`<td class="r">${p===""?fmtI.format(c.prezzo)+" €":""}</td>`:""}<td class="r">${eur(c.tot)}</td></tr>`;
+        ${unit?`<td class="r">${p===""?fmtI.format(c.prezzo)+" €":""}</td>`:""}<td class="r">${p===""?eur(c.tot):""}</td></tr>`;
     }).join("");
     const testa = usati.length > 1 ? `<tr class="grp"><td colspan="${cols}">${GRUPPO_STAMPA[p]}</td></tr>` : "";
     return testa + righe + `<tr class="sub"><td colspan="${cols-1}">${PER_STAMPA[p]} (IVA esclusa)</td><td class="r">${eur(k.per[p].ricavo)}</td></tr>`;
