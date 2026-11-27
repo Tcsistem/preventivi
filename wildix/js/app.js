@@ -731,7 +731,6 @@ function testataOfferta(o, titolo){
 const GRUPPO_STAMPA = {"":"Fornitura una tantum","1m":"Servizi a canone mensile","1y":"Servizi a canone annuale","5y":"Servizi a canone 5 anni (anticipato)"};
 function paperHtml(o){
   const k = calc(o), P = o.parametri, az = S.settings.azienda;
-  const cols = (P.codici?1:0) + 1 + 1 + (P.unit?1:0) + 1;
   // righe raggruppate per periodicità: prima la una tantum, poi i canoni; ogni gruppo chiude con il suo totale.
   // I titoli di sezione restano davanti alle righe che seguono, dentro ciascun gruppo.
   const gruppi = {}; PERIODI.forEach(([p]) => gruppi[p] = []);
@@ -741,13 +740,16 @@ function paperHtml(o){
     if (c.filled) gruppi[c.p].push({r, c, sez});
   });
   const usati = PERIODI.filter(([p]) => gruppi[p].length);
+  // il prezzo unitario si stampa solo sulle righe una tantum, mai su quelle a canone
+  const unit = P.unit && gruppi[""].length > 0;
+  const cols = (P.codici?1:0) + 1 + 1 + (unit?1:0) + 1;
   const body = usati.map(([p]) => {
     let ultima = null;
     const righe = gruppi[p].map(({r, c, sez}) => {
       const tit = sez && sez !== ultima ? `<tr class="sez"><td colspan="${cols}">${esc(sez)}</td></tr>` : ""; ultima = sez;
       const en = P.en && r.descrEn && r.descrEn !== r.descr ? `<span class="en">${esc(r.descrEn)}</span>` : "";
       return tit + `<tr>${P.codici?`<td>${esc(r.codice)}</td>`:""}<td>${esc(r.descr).replace(/\n/g,"<br>")}${en}</td><td class="c">${n2(c.qta)}</td>
-        ${P.unit?`<td class="r">${fmtI.format(c.prezzo)} €</td>`:""}<td class="r">${eur(c.tot)}</td></tr>`;
+        ${unit?`<td class="r">${p===""?fmtI.format(c.prezzo)+" €":""}</td>`:""}<td class="r">${eur(c.tot)}</td></tr>`;
     }).join("");
     const testa = usati.length > 1 ? `<tr class="grp"><td colspan="${cols}">${GRUPPO_STAMPA[p]}</td></tr>` : "";
     return testa + righe + `<tr class="sub"><td colspan="${cols-1}">${PER_STAMPA[p]} (IVA esclusa)</td><td class="r">${eur(k.per[p].ricavo)}</td></tr>`;
@@ -756,7 +758,7 @@ function paperHtml(o){
   const cond = [["Validità offerta", c.validita ? fmtDate(addDays(o.data, c.validita)) : ""], ["Pagamento", c.pagamento], ["Consegna / attivazione", c.consegna],
     canoni ? ["Durata contratto canoni", c.durata] : null, ["Garanzia", c.garanzia], ["IVA", c.iva]].filter(x => x && x[1]);
   return `<div class="paper">${testata(az)}${testataOfferta(o, "OFFERTA")}
-    <table class="pr"><thead><tr>${P.codici?"<th>Codice</th>":""}<th>Descrizione</th><th>Q.tà</th>${P.unit?"<th>Prezzo unit.</th>":""}<th>Totale</th></tr></thead>
+    <table class="pr"><thead><tr>${P.codici?"<th>Codice</th>":""}<th>Descrizione</th><th>Q.tà</th>${unit?"<th>Prezzo unit.</th>":""}<th>Totale</th></tr></thead>
     <tbody>${body || `<tr><td colspan="${cols}" class="c">Nessuna riga compilata</td></tr>`}</tbody></table>
     ${cond.length ? `<h3 style="margin:18px 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.05em">Condizioni di fornitura</h3><table class="cond">${cond.map(([a,b])=>`<tr><td>${esc(a)}</td><td>${esc(b)}</td></tr>`).join("")}</table>` : ""}
     ${c.note ? `<div class="note">${esc(c.note)}</div>` : ""}
