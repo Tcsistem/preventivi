@@ -216,7 +216,7 @@ function bloccoCliente(c){
 }
 const HDR = {oNumero:"numero", oData:"data", oAttenzione:"attenzione", oStato:"stato", oRedatto:"redatto", oOggetto:"oggetto", oBlocco:"clienteBlocco"};
 const COND = {cValidita:"validita", cPagamento:"pagamento", cConsegna:"consegna", cDurata:"durata", cIva:"iva", cGaranzia:"garanzia", cNote:"note"};
-const PSTAMPA = {pCodici:"codici", pUnit:"unit", pListino:"listino", pEn:"en"};
+const PSTAMPA = {pCodici:"codici", pUnit:"unit", pEn:"en"};
 function loadOfferIntoForm(){
   const o = S.offer;
   $("#hNum").textContent = o.numero; chipStato();
@@ -728,30 +728,36 @@ function testataOfferta(o, titolo){
       <tr><td>Cortese attenzione</td><td>${esc(o.attenzione)}</td></tr><tr><td>Redatto da</td><td>${esc(o.redatto)}</td></tr></table></div>
     <div class="ogg">OGGETTO: <span>${esc(o.oggetto)}</span></div>`;
 }
+const GRUPPO_STAMPA = {"":"Fornitura una tantum","1m":"Servizi a canone mensile","1y":"Servizi a canone annuale","5y":"Servizi a canone 5 anni (anticipato)"};
 function paperHtml(o){
   const k = calc(o), P = o.parametri, az = S.settings.azienda;
-  const periodiUsati = PERIODI.filter(([p]) => k.rows.some(c => !c.sez && c.filled && c.p === p));
-  const colPer = periodiUsati.length > 1;
-  const colUm = o.righe.some((r,i) => r.tipo !== "sez" && k.rows[i].filled && String(r.um||"").trim());
-  const cols = 1 + (P.codici?1:0) + (colUm?1:0) + 1 + (P.listino?2:0) + (P.unit?1:0) + 1 + (colPer?1:0);
-  const body = o.righe.map((r,i) => {
-    const c = k.rows[i];
-    if (r.tipo === "sez") return r.descr ? `<tr class="sez"><td colspan="${cols}">${esc(r.descr)}</td></tr>` : "";
-    if (!c.filled) return "";
-    const en = P.en && r.descrEn && r.descrEn !== r.descr ? `<span class="en">${esc(r.descrEn)}</span>` : "";
-    const sc = haListino(r) && num(r.listino) ? (1 - c.prezzo/num(r.listino))*100 : 0;
-    return `<tr>${P.codici?`<td>${esc(r.codice)}</td>`:""}<td>${esc(r.descr).replace(/\n/g,"<br>")}${en}</td>${colUm?`<td class="c">${esc(r.um||"")}</td>`:""}<td class="c">${n2(c.qta)}</td>
-      ${P.listino?`<td class="r">${haListino(r)?fmtI.format(num(r.listino))+" €":""}</td><td class="r">${sc>0.004?n2(sc)+"%":""}</td>`:""}
-      ${P.unit?`<td class="r">${fmtI.format(c.prezzo)} €</td>`:""}<td class="r">${eur(c.tot)}</td>${colPer?`<td class="c">${PER_LAB[c.p]}</td>`:""}</tr>`;
+  const cols = (P.codici?1:0) + 1 + 1 + (P.unit?1:0) + 1;
+  // righe raggruppate per periodicità: prima la una tantum, poi i canoni; ogni gruppo chiude con il suo totale.
+  // I titoli di sezione restano davanti alle righe che seguono, dentro ciascun gruppo.
+  const gruppi = {}; PERIODI.forEach(([p]) => gruppi[p] = []);
+  let sez = "";
+  o.righe.forEach((r,i) => { const c = k.rows[i];
+    if (r.tipo === "sez"){ sez = r.descr || ""; return; }
+    if (c.filled) gruppi[c.p].push({r, c, sez});
+  });
+  const usati = PERIODI.filter(([p]) => gruppi[p].length);
+  const body = usati.map(([p]) => {
+    let ultima = null;
+    const righe = gruppi[p].map(({r, c, sez}) => {
+      const tit = sez && sez !== ultima ? `<tr class="sez"><td colspan="${cols}">${esc(sez)}</td></tr>` : ""; ultima = sez;
+      const en = P.en && r.descrEn && r.descrEn !== r.descr ? `<span class="en">${esc(r.descrEn)}</span>` : "";
+      return tit + `<tr>${P.codici?`<td>${esc(r.codice)}</td>`:""}<td>${esc(r.descr).replace(/\n/g,"<br>")}${en}</td><td class="c">${n2(c.qta)}</td>
+        ${P.unit?`<td class="r">${fmtI.format(c.prezzo)} €</td>`:""}<td class="r">${eur(c.tot)}</td></tr>`;
+    }).join("");
+    const testa = usati.length > 1 ? `<tr class="grp"><td colspan="${cols}">${GRUPPO_STAMPA[p]}</td></tr>` : "";
+    return testa + righe + `<tr class="sub"><td colspan="${cols-1}">${PER_STAMPA[p]} (IVA esclusa)</td><td class="r">${eur(k.per[p].ricavo)}</td></tr>`;
   }).join("");
-  const tot = PERIODI.filter(([p]) => k.per[p].ricavo).map(([p]) => `<tr class="g"><td>${PER_STAMPA[p]} (IVA esclusa)</td><td class="r">${eur(k.per[p].ricavo)}</td></tr>`).join("");
   const c = o.condizioni, canoni = k.per["1m"].ricavo || k.per["1y"].ricavo || k.per["5y"].ricavo;
   const cond = [["Validità offerta", c.validita ? fmtDate(addDays(o.data, c.validita)) : ""], ["Pagamento", c.pagamento], ["Consegna / attivazione", c.consegna],
     canoni ? ["Durata contratto canoni", c.durata] : null, ["Garanzia", c.garanzia], ["IVA", c.iva]].filter(x => x && x[1]);
   return `<div class="paper">${testata(az)}${testataOfferta(o, "OFFERTA")}
-    <table class="pr"><thead><tr>${P.codici?"<th>Codice</th>":""}<th>Descrizione</th>${colUm?"<th>U.M.</th>":""}<th>Q.tà</th>${P.listino?"<th>Listino</th><th>Sconto</th>":""}${P.unit?"<th>Prezzo unit.</th>":""}<th>Totale</th>${colPer?"<th>Periodicità</th>":""}</tr></thead>
+    <table class="pr"><thead><tr>${P.codici?"<th>Codice</th>":""}<th>Descrizione</th><th>Q.tà</th>${P.unit?"<th>Prezzo unit.</th>":""}<th>Totale</th></tr></thead>
     <tbody>${body || `<tr><td colspan="${cols}" class="c">Nessuna riga compilata</td></tr>`}</tbody></table>
-    <table class="tots">${tot || `<tr><td>Totale</td><td class="r">${eur(0)}</td></tr>`}</table>
     ${cond.length ? `<h3 style="margin:18px 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.05em">Condizioni di fornitura</h3><table class="cond">${cond.map(([a,b])=>`<tr><td>${esc(a)}</td><td>${esc(b)}</td></tr>`).join("")}</table>` : ""}
     ${c.note ? `<div class="note">${esc(c.note)}</div>` : ""}
     <p style="margin:12px 0 0">${az.tel ? `Per qualsiasi chiarimento: <b>${esc(az.tel)}</b><br>` : ""}Grazie per averci scelto!</p>

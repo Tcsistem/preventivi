@@ -97,3 +97,9 @@ table.righe.wx td.in select.modo{min-width:0;width:100%;font-size:11px;padding:1
 
 .brand{align-items:center}.brand .blogo{height:30px;width:auto}
 .brand h1 b{color:#f08a00}
+
+/* stampa cliente: gruppi per periodicità con totale sotto */
+.paper table.pr tr.grp td{background:#1f3a5f;color:#fff;font-weight:700;font-family:var(--f-head);text-transform:uppercase;letter-spacing:.06em;font-size:12px}
+.paper table.pr tr.sub td{background:#dceaf7;font-weight:700;font-size:13px;text-align:right}
+.paper table.pr tr.sub td.r{white-space:nowrap}
+@media print{.paper table.pr tr.grp td,.paper table.pr tr.sub td{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
