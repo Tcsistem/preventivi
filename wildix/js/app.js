@@ -225,7 +225,7 @@ function loadOfferIntoForm(){
   for (const id in COND) $("#"+id).value = o.condizioni[COND[id]] ?? "";
   for (const id in PSTAMPA) $("#"+id).checked = !!o.parametri[PSTAMPA[id]];
   $("#gSconto").value = inN(o.parametri.sconto); $("#gRicarico").value = inN(o.parametri.ricarico);
-  renderRighe(); renderCosti(); update();
+  renderRighe(); renderCosti(); update(); ficInfo();
 }
 function chipStato(){ const s=S.offer.stato, c=$("#hStato"); c.textContent=s; c.className="chip "+(s==="Accettata"?"good":s==="Inviata"?"navy":s==="Persa"?"red":""); }
 for (const id in HDR) $("#"+id).addEventListener("input", e => { S.offer[HDR[id]] = e.target.value; if (id==="oNumero") $("#hNum").textContent = e.target.value; if (id==="oStato") chipStato(); markDirty(); });
@@ -812,6 +812,51 @@ $("#bAnteprima").addEventListener("click", () => {
   L.addEventListener("click", e => { const x=e.target.closest("[data-x]"); if(!x) return; if (x.dataset.x==="close") closeLayer(); if (x.dataset.x==="print") stampa(paperHtml(S.offer), nomeFile(S.offer, "Offerta")); });
 });
 $("#bInterno").addEventListener("click", () => stampa(paperInterno(S.offer), nomeFile(S.offer, "INTERNO Analisi")));
+
+/* ---------------------------------------------------------------- Fatture in Cloud */
+async function chiamaFic(body){
+  if (S.prova) throw new Error("In modalità prova Fatture in Cloud non è disponibile.");
+  const {data, error} = await S.sb.functions.invoke("wx-fic", {body});
+  if (error){
+    let msg = error.message;
+    try{ const b = await error.context.json(); if (b && b.errore) msg = b.errore; }catch(e){}
+    if (/Failed to send|not found|404/i.test(msg)) msg = "Il collegamento con Fatture in Cloud non è ancora attivo (funzione wx-fic non installata su Supabase).";
+    throw new Error(msg);
+  }
+  if (data && data.errore) throw new Error(data.errore);
+  return data;
+}
+function ficInfo(){
+  const f = S.offer && S.offer.parametri && S.offer.parametri.fic;
+  $("#ficInfo").innerHTML = f ? `Proforma <b>${esc(f.numero||"")}</b> creata il ${fmtDate(f.data)}${f.url?` · <a href="${esc(f.url)}" target="_blank" rel="noopener">apri PDF</a>`:""}` : "";
+}
+$("#bFic").addEventListener("click", () => {
+  const o = S.offer, k = calc(o);
+  const n = o.righe.filter((r,i) => r.tipo !== "sez" && k.rows[i].filled && num(r.qta)).length;
+  if (!n) return toast("L'offerta non ha righe");
+  if (!String(o.cliente).trim()) return toast("Manca il cliente");
+  const imp = k.per[""].ricavo + k.per["1m"].ricavo + k.per["1y"].ricavo + k.per["5y"].ricavo;
+  const gia = o.parametri.fic;
+  confirmBox("Creare la proforma in Fatture in Cloud?",
+    `${gia ? "Per questa offerta esiste già la proforma " + (gia.numero||"") + ": ne verrà creata un'altra. " : ""}Cliente: ${o.cliente}. ${n} righe (una tantum + primo periodo dei canoni), imponibile ${eur(imp)} + IVA 22%. L'offerta viene prima salvata.`,
+    "Crea proforma", async () => {
+      const b = $("#bFic"); b.disabled = true; b.textContent = "Creazione in corso…";
+      try{
+        if (S.dirty || o.isNew) await saveOffer();
+        if (S.dirty || o.isNew) throw new Error("Salva l'offerta prima di creare la proforma.");
+        const r = await chiamaFic({azione:"proforma", offerta_id:o.id});
+        o.parametri.fic = {id:r.id, numero:r.numero, data:r.data, url:r.url};
+        S.dirty = true; await saveOffer(); ficInfo();
+        toast(`Proforma ${r.numero} creata in Fatture in Cloud${r.cliente_creato ? " (cliente aggiunto in anagrafica)" : ""}`);
+      }catch(e){ toast(errMsg(e)); $("#ficInfo").textContent = errMsg(e); }
+      b.disabled = false; b.textContent = "Crea proforma in Fatture in Cloud";
+    });
+});
+$("#bFicTest").addEventListener("click", async () => {
+  $("#ficTest").textContent = "Verifica…";
+  try{ const r = await chiamaFic({azione:"test"}); $("#ficTest").textContent = "Collegato a Fatture in Cloud: " + (r.azienda || "azienda " + r.company_id); }
+  catch(e){ $("#ficTest").textContent = errMsg(e); }
+});
 
 /* ---------------------------------------------------------------- dialoghi */
 function openLayer(html){ const l=$("#layer"); l.innerHTML=`<div class="overlay" role="dialog" aria-modal="true">${html}</div>`; const ov=l.firstChild;

@@ -103,3 +103,5 @@ table.righe.wx td.in select.modo{min-width:0;width:100%;font-size:11px;padding:1
 .paper table.pr tr.sub td{background:#dceaf7;font-weight:700;font-size:13px;text-align:right}
 .paper table.pr tr.sub td.r{white-space:nowrap}
 @media print{.paper table.pr tr.grp td,.paper table.pr tr.sub td{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+
+.btn.fic{border-color:#0d6efd;color:#0d6efd}

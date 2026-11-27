@@ -6,8 +6,8 @@
 <title>TC Sistem Preventivi</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="../css/app.css?v=202611270953">
-<link rel="stylesheet" href="css/wx.css?v=202611270953">
+<link rel="stylesheet" href="../css/app.css?v=202611271008">
+<link rel="stylesheet" href="css/wx.css?v=202611271008">
 </head>
 <body>
 
@@ -178,8 +178,10 @@
           <button class="btn primary" id="bSalva" type="button">Salva</button>
           <button class="btn navy" id="bAnteprima" type="button">Anteprima / PDF</button>
           <button class="btn" id="bInterno" type="button">Stampa costi interni</button>
+          <button class="btn fic" id="bFic" type="button">Crea proforma in Fatture in Cloud</button>
         </div>
         <div class="hint" id="saveHint" style="margin-top:8px"></div>
+        <div class="hint" id="ficInfo" style="margin-top:6px"></div>
       </div>
     </aside>
   </div>
@@ -284,6 +286,12 @@
     </div>
   </div>
   <div class="card">
+    <div class="card-h"><h2>Fatture in Cloud</h2></div>
+    <p class="hint" style="margin-top:0">Dal riquadro economico dell'offerta crei una <b>fattura proforma</b> in Fatture in Cloud con tutte le righe una tantum e il primo periodo dei canoni.
+      Il cliente viene cercato per P.IVA e, se non c'è, aggiunto all'anagrafica di Fatture in Cloud. Il collegamento usa un token che resta nei segreti di Supabase (non nel sito).</p>
+    <div class="row"><button class="btn" id="bFicTest" type="button">Prova collegamento</button><span class="hint" id="ficTest"></span></div>
+  </div>
+  <div class="card">
     <div class="card-h"><h2>Il mio nome</h2></div>
     <div class="row"><input class="inp" id="sMioNome" style="max-width:280px"><button class="btn" id="bMioNome" type="button">Salva</button><span class="hint">Compare in “Redatto da”.</span></div>
   </div>
@@ -296,8 +304,8 @@
 <div id="printArea"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="js/config.js?v=202611270953"></script>
-<script src="js/prova.js?v=202611270953"></script>
-<script src="js/app.js?v=202611270953"></script>
+<script src="js/config.js?v=202611271008"></script>
+<script src="js/prova.js?v=202611271008"></script>
+<script src="js/app.js?v=202611271008"></script>
 </body>
 </html>
