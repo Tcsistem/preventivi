@@ -225,9 +225,17 @@ function loadOfferIntoForm(){
   for (const id in COND) $("#"+id).value = o.condizioni[COND[id]] ?? "";
   for (const id in PSTAMPA) $("#"+id).checked = !!o.parametri[PSTAMPA[id]];
   $("#gSconto").value = inN(o.parametri.sconto); $("#gRicarico").value = inN(o.parametri.ricarico);
-  renderRighe(); renderCosti(); update(); ficInfo();
+  renderRighe(); renderCosti(); update(); ficInfo(); richInfo();
 }
-function chipStato(){ const s=S.offer.stato, c=$("#hStato"); c.textContent=s; c.className="chip "+(s==="Accettata"?"good":s==="Inviata"?"navy":s==="Persa"?"red":""); }
+function richInfo(){
+  const R = S.offer.parametri && S.offer.parametri.richiesta, el = $("#richInfo");
+  if (!R){ el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = `<b>Richiesta dal ${esc(R.canale||"bot")}</b> · venditore <b>${esc(R.venditore||"")}</b>${R.quando?" · "+new Date(R.quando).toLocaleString("it-IT",{dateStyle:"short",timeStyle:"short"}):""}
+    ${R.note?`<div>Note: ${esc(R.note)}</div>`:""}${R.non_trovati&&R.non_trovati.length?`<div class="neg">Articoli da verificare: ${esc(R.non_trovati.join(", "))}</div>`:""}
+    <div class="hint">Controlla righe, sconti e costi interni, poi cambia lo stato in Bozza o Inviata.</div>`;
+}
+function chipStato(){ const s=S.offer.stato, c=$("#hStato"); c.textContent=s; c.className="chip "+(s==="Accettata"?"good":s==="Inviata"?"navy":s==="Persa"?"red":s==="Richiesta"?"warn":""); }
 for (const id in HDR) $("#"+id).addEventListener("input", e => { S.offer[HDR[id]] = e.target.value; if (id==="oNumero") $("#hNum").textContent = e.target.value; if (id==="oStato") chipStato(); markDirty(); });
 for (const id in COND) $("#"+id).addEventListener("input", e => { S.offer.condizioni[COND[id]] = e.target.value; markDirty(); });
 for (const id in PSTAMPA) $("#"+id).addEventListener("change", e => { S.offer.parametri[PSTAMPA[id]] = e.target.checked; markDirty(); });
@@ -456,7 +464,7 @@ function renderArchivio(){
   const L = S.offerte.filter(o => !q || [o.numero,o.cliente,o.oggetto,o.stato].join(" ").toLowerCase().includes(q));
   $("#archList").innerHTML = L.length ? `<div class="tablewrap" style="border:0"><table class="list"><thead><tr><th>Nr.</th><th>Data</th><th>Cliente</th><th>Oggetto</th><th>Stato</th><th class="r">Una tantum</th><th class="r">Mensile</th><th class="r">Margine 1° anno</th><th>Ultima modifica</th><th></th></tr></thead><tbody>
     ${L.map(o => `<tr class="click" data-id="${esc(o.id)}"><td><b>${esc(o.numero)}</b></td><td>${fmtDate(o.data)}</td><td>${esc(o.cliente)}</td><td>${esc(o.oggetto)}</td>
-      <td><span class="chip ${o.stato==="Accettata"?"good":o.stato==="Inviata"?"navy":o.stato==="Persa"?"red":""}">${esc(o.stato)}</span></td>
+      <td><span class="chip ${o.stato==="Accettata"?"good":o.stato==="Inviata"?"navy":o.stato==="Persa"?"red":o.stato==="Richiesta"?"warn":""}">${esc(o.stato)}</span></td>
       <td class="r">${eur(+o.tot_una_tantum)}</td><td class="r">${eur(+o.tot_mensile)}</td><td class="r">${eur(+o.margine_anno1)}</td>
       <td class="hint">${new Date(o.updated_at).toLocaleString("it-IT",{dateStyle:"short",timeStyle:"short"})}${S.utenti[o.updated_by]?" · "+esc(S.utenti[o.updated_by]):""}</td>
       <td style="white-space:nowrap"><button class="btn sm" data-a="dup" type="button">Duplica</button> <button class="btn sm ghost danger" data-a="del" type="button">Elimina</button></td></tr>`).join("")}
@@ -914,6 +922,8 @@ async function startApp(user){
   if (bozza && bozza.righe){ S.offer = bozza; S.dirty = true; toast("Ripresa l'offerta che stavi scrivendo (non salvata)"); }
   else S.offer = newOffer();
   loadOfferIntoForm(); setStatus();
+  const h = location.hash.match(/offerta=([0-9a-f-]{36})/i);
+  if (h){ history.replaceState(null, "", location.pathname + location.search); S.dirty = false; await openOffer(h[1]); }
   if (!S.listino.some(a => a.listino !== "PERSONALE")) banner2("Il database non ha ancora il listino Wildix: vai nella scheda Listini Wildix e premi “Carica listino incluso”.");
 }
 function banner(t){ const b=$("#banner"); b.textContent=t; b.hidden=false; }

@@ -95,7 +95,7 @@ create table if not exists public.wx_offerte (
   id              uuid primary key default gen_random_uuid(),
   numero          text not null unique,          -- es. W2026/001
   data            date not null default current_date,
-  stato           text not null default 'Bozza' check (stato in ('Bozza','Inviata','Accettata','Persa')),
+  stato           text not null default 'Bozza' check (stato in ('Richiesta','Bozza','Inviata','Accettata','Persa')),
   cliente_id      uuid references public.wx_clienti(id) on delete set null,
   cliente         text not null default '',
   cliente_blocco  text not null default '',
@@ -119,6 +119,9 @@ create table if not exists public.wx_offerte (
   updated_at      timestamptz not null default now()
 );
 create index if not exists wx_offerte_updated_idx on public.wx_offerte (updated_at desc);
+-- stato "Richiesta" (offerte create dal bot dei venditori) anche sui database già installati
+alter table public.wx_offerte drop constraint if exists wx_offerte_stato_check;
+alter table public.wx_offerte add constraint wx_offerte_stato_check check (stato in ('Richiesta','Bozza','Inviata','Accettata','Persa'));
 
 -- ---------------------------------------------------------------------
 -- Impostazioni (una riga): intestazione, sconti/ricarichi predefiniti, testi

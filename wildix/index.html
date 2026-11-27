@@ -6,8 +6,8 @@
 <title>TC Sistem Preventivi</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="../css/app.css?v=202611271008">
-<link rel="stylesheet" href="css/wx.css?v=202611271008">
+<link rel="stylesheet" href="../css/app.css?v=202611271040">
+<link rel="stylesheet" href="css/wx.css?v=202611271040">
 </head>
 <body>
 
@@ -66,6 +66,7 @@
             <button class="btn" id="bDuplica" type="button">Duplica</button>
           </div>
         </div>
+        <div class="richiesta" id="richInfo" hidden></div>
         <div class="grid g4">
           <label class="f span2">Spett.le (cliente)
             <input id="oCliente" list="dlClienti" autocomplete="off" placeholder="Cerca in anagrafica o scrivi il nome">
@@ -77,7 +78,7 @@
           </label>
           <label class="f">Cortese attenzione<input id="oAttenzione"></label>
           <label class="f">Stato
-            <select id="oStato"><option>Bozza</option><option>Inviata</option><option>Accettata</option><option>Persa</option></select>
+            <select id="oStato"><option>Richiesta</option><option>Bozza</option><option>Inviata</option><option>Accettata</option><option>Persa</option></select>
           </label>
           <label class="f">Redatto da<input id="oRedatto"></label>
           <label class="f span3">Oggetto<input id="oOggetto" placeholder="Es. Centralino Wildix in cloud con 10 utenti e telefoni in noleggio"></label>
@@ -304,8 +305,8 @@
 <div id="printArea"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="js/config.js?v=202611271008"></script>
-<script src="js/prova.js?v=202611271008"></script>
-<script src="js/app.js?v=202611271008"></script>
+<script src="js/config.js?v=202611271040"></script>
+<script src="js/prova.js?v=202611271040"></script>
+<script src="js/app.js?v=202611271040"></script>
 </body>
 </html>
