@@ -6,9 +6,9 @@
 <title>TC Sistem Gestionale</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Barlow+Condensed:wght@600;700&display=swap">
-<link rel="stylesheet" href="../css/app.css?v=202611281828">
-<link rel="stylesheet" href="css/wx.css?v=202611281828">
-<link rel="stylesheet" href="css/tema.css?v=202611281828">
+<link rel="stylesheet" href="../css/app.css?v=202611281839">
+<link rel="stylesheet" href="css/wx.css?v=202611281839">
+<link rel="stylesheet" href="css/tema.css?v=202611281839">
 </head>
 <body>
 
@@ -362,6 +362,11 @@
     <div class="row" style="margin-top:12px"><button class="btn" id="bSalvaTar" type="button">Salva tariffe</button></div>
   </div>
   <div class="card">
+    <div class="card-h"><h2>Calendario Microsoft 365</h2></div>
+    <p class="hint" style="margin-top:0">I ticket con data (e ora) di intervento vanno da soli nel calendario condiviso di <b>c.tecnico@tcsimpiantisrl.onmicrosoft.com</b>: se cambi data, ora, tecnico o stato l'appuntamento si aggiorna, se togli la data o cancelli il ticket viene eliminato. Senza ora diventa un appuntamento di tutta la giornata.</p>
+    <div class="row"><button class="btn" id="bCalTest" type="button">Prova collegamento</button><span class="hint" id="calTest"></span></div>
+  </div>
+  <div class="card">
     <div class="card-h"><h2>App dei tecnici (rapportini)</h2></div>
     <p class="hint" style="margin-top:0">I tecnici vedono i ticket nella scheda <b>Ticket</b> della loro app, li prendono in carico, fanno il rapportino collegato e ricevono la notifica dei nuovi ticket.
       Al primo uso l'app chiede questo PIN (almeno 6 caratteri): dallo solo ai tecnici. Se lo cambi, i telefoni lo richiederanno.</p>
@@ -387,8 +392,8 @@
 <div id="printArea"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="js/config.js?v=202611281828"></script>
-<script src="js/prova.js?v=202611281828"></script>
-<script src="js/app.js?v=202611281828"></script>
+<script src="js/config.js?v=202611281839"></script>
+<script src="js/prova.js?v=202611281839"></script>
+<script src="js/app.js?v=202611281839"></script>
 </body>
 </html>

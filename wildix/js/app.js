@@ -727,6 +727,16 @@ $("#bEspMat").addEventListener("click", () => {
 });
 
 /* ---------------------------------------------------------------- impostazioni */
+$("#bCalTest").addEventListener("click", async () => {
+  $("#calTest").textContent = "Prova in corso…";
+  try{
+    const {data, error} = await S.sb.functions.invoke("wx-cal", {body:{azione:"test"}});
+    let msg = error ? error.message : (data && data.errore);
+    if (error){ try{ const b = await error.context.json(); if (b && b.errore) msg = b.errore; }catch(e){} }
+    if (msg) throw new Error(/Failed to send|404/.test(msg) ? "Funzione wx-cal non ancora installata." : msg);
+    $("#calTest").textContent = `Collegato al calendario "${data.calendario}" di ${data.casella}.`;
+  }catch(e){ $("#calTest").textContent = e.message; }
+});
 $("#bPinTec").addEventListener("click", async () => {
   const pin = $("#sPinTec").value.trim();
   if (pin.length < 6) return toast("Il PIN deve avere almeno 6 caratteri");
@@ -890,7 +900,7 @@ function renderTicket(){
     ${L.map(t => `<tr class="click" data-id="${esc(t.id)}"><td><b>${esc(t.numero)}</b></td><td class="hint">${new Date(t.created_at).toLocaleString("it-IT",{dateStyle:"short",timeStyle:"short"})}</td>
       <td><span class="chip ${tkChip(t.stato)}">${esc(t.stato)}</span></td><td>${t.priorita!=="Normale"?`<span class="chip ${prioChip(t.priorita)}">${esc(t.priorita)}</span>`:"Normale"}</td>
       <td>${esc(t.cliente||"—")}${t.cliente && !t.cliente_id ? ' <span class="chip warn" title="Cliente non collegato all\'anagrafica">da verificare</span>' : ""}${t.richiedente?`<div class="hint">${esc(t.richiedente)}${t.telefono?" · "+esc(t.telefono):""}</div>`:""}</td>
-      <td>${esc(t.oggetto)}</td><td>${esc(t.tecnico)}</td><td>${fmtDate(t.data_intervento)}</td><td class="hint">${esc(t.canale)}</td></tr>`).join("")}
+      <td>${esc(t.oggetto)}</td><td>${esc(t.tecnico)}</td><td class="nowrap">${fmtDate(t.data_intervento)}${t.ora_intervento?" "+String(t.ora_intervento).slice(0,5):""}${t.evento_id?' <span title="Nel calendario">📅</span>':""}</td><td class="hint">${esc(t.canale)}</td></tr>`).join("")}
     </tbody></table></div>` : `<div class="empty"><b>Nessun ticket</b>${f==="aperti"?"Non ci sono richieste aperte.":"Nessun ticket con questo filtro."}</div>`;
 }
 $("#segTk").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; S.tkFiltro = b.dataset.f;
@@ -914,6 +924,13 @@ function clientiSimili(nome){
   const n = normRs(nome); if (n.length < 2) return [];
   return S.clienti.map(c => ({c, s: somiglianza(n, normRs(c.rs))})).filter(x => x.s >= 0.6).sort((x, y) => y.s - x.s).slice(0, 4).map(x => x.c);
 }
+function calStato(t){
+  if (!t || !t.data_intervento) return `<span class="hint">📅 Metti data (e ora) dell'intervento: l'appuntamento va da solo nel calendario condiviso.</span>`;
+  const st = String(t.evento_stato||"");
+  if (st.startsWith("errore")) return `<span class="chip red" title="${esc(st)}">📅 Calendario non aggiornato</span> <span class="hint">${esc(st.replace(/^errore:\s*/,"").slice(0,140))}</span>`;
+  if (t.evento_id) return `<span class="chip good">📅 Nel calendario</span>`;
+  return `<span class="hint">📅 In invio al calendario…</span>`;
+}
 function editTicket(t){
   const nuovo = !t;
   t = t ? clone(t) : {stato:"Nuovo", priorita:"Normale", canale:"manuale", cliente:"", cliente_id:null, richiedente:"", telefono:"", email:"", indirizzo:"", oggetto:"", descrizione:"", tecnico:"", data_intervento:"", note_interne:"", storico:[], rapportino:""};
@@ -933,6 +950,9 @@ function editTicket(t){
       <label class="f span4">Descrizione del problema<textarea data-t="descrizione" rows="4">${esc(t.descrizione)}</textarea></label>
       <label class="f">Tecnico<input data-t="tecnico" list="dlTecnici" value="${esc(t.tecnico)}"><datalist id="dlTecnici">${S.tecnici.map(n=>`<option value="${esc(n)}">`).join("")}</datalist></label>
       <label class="f">Data intervento<input data-t="data_intervento" type="date" value="${esc(t.data_intervento||"")}"></label>
+      <label class="f">Ora<input data-t="ora_intervento" type="time" step="900" value="${esc(String(t.ora_intervento||"").slice(0,5))}"></label>
+      <label class="f">Durata<select data-t="durata_min">${[[30,"30 min"],[60,"1 ora"],[90,"1 ora e ½"],[120,"2 ore"],[180,"3 ore"],[240,"Mezza giornata"],[480,"Giornata intera"]].map(([v,l])=>`<option value="${v}"${+(t.durata_min||60)===v?" selected":""}>${l}</option>`).join("")}</select></label>
+      <div class="f span2 calst">${calStato(t)}</div>
       <label class="f span2">Rapportino collegato (numero)<input data-t="rapportino" value="${esc(t.rapportino||"")}"></label>
       <label class="f span4">Note interne (non visibili al cliente)<textarea data-t="note_interne" rows="2">${esc(t.note_interne)}</textarea></label>
     </div>
@@ -947,7 +967,7 @@ function editTicket(t){
   };
   inCli.addEventListener("input", suggerisci); suggerisci();
   boxS.addEventListener("click", e => { const b = e.target.closest("[data-rs]"); if (!b) return; e.preventDefault(); inCli.value = b.dataset.rs; suggerisci(); });
-  const leggi = () => { const r = {}; $$("[data-t]", L).forEach(i => r[i.dataset.t] = i.value.trim()); r.data_intervento = r.data_intervento || null;
+  const leggi = () => { const r = {}; $$("[data-t]", L).forEach(i => r[i.dataset.t] = i.value.trim()); r.data_intervento = r.data_intervento || null; r.ora_intervento = r.ora_intervento || null; r.durata_min = +r.durata_min || 60;
     const c = S.clienti.find(x => x.rs.toLowerCase() === r.cliente.toLowerCase()); r.cliente_id = c ? c.id : (r.cliente === t.cliente ? t.cliente_id : null);
     if (c && !r.indirizzo) r.indirizzo = [c.ind, c.cap, c.citta, c.prov].filter(Boolean).join(" ");
     if (r.stato === "Chiuso" && t.stato !== "Chiuso") r.chiuso_at = new Date().toISOString();
@@ -957,7 +977,7 @@ function editTicket(t){
     const r = Object.assign(leggi(), extra || {});
     if (!r.oggetto && !r.descrizione) { toast("Scrivi almeno oggetto o descrizione"); return false; }
     const io = (S.profilo && S.profilo.nome) || S.user.email;
-    const cambi = nuovo ? [] : ["stato","tecnico","data_intervento","priorita"].filter(k => String(r[k]||"") !== String(t[k]||"")).map(k => `${k.replace("_"," ")}: ${r[k]||"—"}`);
+    const cambi = nuovo ? [] : ["stato","tecnico","data_intervento","ora_intervento","priorita"].filter(k => String(r[k]||"") !== String(t[k]||"")).map(k => `${k.replace("_"," ")}: ${r[k]||"—"}`);
     let res;
     if (nuovo){
       const {data:num} = await S.sb.rpc("wx_prossimo_ticket");
