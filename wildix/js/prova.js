@@ -5,7 +5,7 @@
   const now = () => new Date(Date.now() + (window.__tick = (window.__tick||0) + 1)).toISOString();
   const KEY = "wx-prev-prova-db";
   const U = {id:"prova", email:"prova@locale"};
-  const vuoto = () => ({wx_utenti:[{user_id:"prova", nome:"Prova", email:"prova@locale"}], wx_clienti:[], wx_listino:[], wx_offerte:[], wx_impostazioni:[{id:1, dati:{}}], wx_ticket:[], operai:[{id:1,nome:"Mario Rossi"},{id:2,nome:"Luca Bianchi"}], _seq:1});
+  const vuoto = () => ({wx_utenti:[{user_id:"prova", nome:"Prova", email:"prova@locale"}], wx_clienti:[], wx_listino:[], wx_offerte:[], wx_impostazioni:[{id:1, dati:{}}], wx_ticket:[], rapportini:[{id:1, numero:"R-0101", data:new Date().toISOString().slice(0,10), cliente:"CO.M.E.P. S.R.L.", indirizzo:"Via Roma 1, Latina", tecnico:"MARIO ROSSI", stato:"100", descrizione:"Sostituito alimentatore del centralino, verificate le linee in ingresso.", note:"Ticket T001-26 – Centralino non squilla", tot_lav:2, tot_str:0, tot_sab:0, tot_fest:0, tot_viag:1, materiali:[{desc:"Alimentatore 48V", qty:1, unit:"pz"}], operai:[{nome:"MARIO ROSSI", oreLav:2, oreViag:1}], firmato:true, email_cliente:"mario@comep.it", firme:{}, proforma:null, created_at:new Date().toISOString()}], operai:[{id:1,nome:"Mario Rossi"},{id:2,nome:"Luca Bianchi"}], _seq:1});
   let DB; try{ DB = JSON.parse(localStorage.getItem(KEY)) || vuoto(); }catch(e){ DB = vuoto(); }
   const V0 = vuoto(); for (const k in V0) if (!(k in DB)) DB[k] = V0[k];
   const salva = () => { try{ localStorage.setItem(KEY, JSON.stringify(DB)); }catch(e){ console.warn("Spazio del browser pieno", e); } };

@@ -11,6 +11,7 @@ const DEFAULT_SET = {
   sconto:0, ricarico:30, versione:"",
   cond:{validita:30, pagamento:"Bonifico bancario 30 gg d.f.", consegna:"Da concordare", durata:"36 mesi per i servizi a canone",
         iva:"Esclusa (aliquota di legge)", garanzia:"Secondo le condizioni del produttore", note:""},
+  tariffe:{ora:35, viaggio:25, materiali:"si"},
   preset:[{descr:"Ore tecnico installazione e configurazione", costo:30, periodo:""},{descr:"Trasferta", costo:50, periodo:""},{descr:"Connettività fornitore", costo:25, periodo:"1m"}]
 };
 
@@ -194,7 +195,7 @@ function calc(o){
 }
 
 /* ---------------------------------------------------------------- viste */
-const SEZ_VISTA = {home:"home", preventivi:"offerta", assistenza:"assistenza", catalogo:"listini", impostazioni:"impostazioni"};
+const SEZ_VISTA = {home:"home", rapportini:"rapportini", preventivi:"offerta", assistenza:"assistenza", catalogo:"listini", impostazioni:"impostazioni"};
 S.sez = "home";
 function show(view, sez){
   if (!sez){ const cur = $(`.tab[data-sez="${S.sez}"][data-view="${view}"]`); sez = cur ? S.sez : ($(`.tab[data-view="${view}"]`)||{dataset:{}}).dataset.sez || S.sez; }
@@ -209,6 +210,7 @@ function show(view, sez){
   if (view==="materiali") renderMiei();
   if (view==="assistenza"){ renderTicket(); loadTicket(); }
   if (view==="home") renderHome();
+  if (view==="rapportini"){ renderRap(); loadRap(); }
   if (view==="impostazioni") renderSettings();
   window.scrollTo(0,0);
 }
@@ -223,6 +225,8 @@ function renderHome(){
   const nTk = (S.ticket || []).filter(t => t.stato === "Nuovo").length, nAp = (S.ticket || []).filter(t => t.stato !== "Chiuso").length;
   $("#homeNTk").textContent = nTk ? nTk + (nTk === 1 ? " nuovo" : " nuovi") : (nAp ? nAp + " aperti" : ""); $("#homeNTk").classList.toggle("red", !!nTk);
   const nRich = (S.offerte || []).filter(o => o.stato === "Richiesta").length;
+  const nNoPf = (S.rap||[]).filter(r => !r.proforma && r.firmato && String(r.data||"") >= new Date(Date.now()-60*864e5).toISOString().slice(0,10)).length;
+  $("#homeNRap").textContent = nNoPf ? nNoPf + " firmati senza proforma" : "";
   $("#homeNOff").textContent = nRich ? nRich + (nRich === 1 ? " richiesta da preparare" : " richieste da preparare") : "";
 }
 function setStatus(){
@@ -744,7 +748,12 @@ function renderSettings(){
   $("#sDurata").value = c.durata; $("#sGaranzia").value = c.garanzia; $("#sNote").value = c.note;
   $("#sPreset").value = (s.preset||[]).map(p => [p.descr, inN(p.costo), p.periodo||""].join(" ; ")).join("\n");
   $("#sMioNome").value = (S.profilo && S.profilo.nome) || "";
+  const t = s.tariffe || {}; $("#sTarOra").value = inN(t.ora); $("#sTarViag").value = inN(t.viaggio); $("#sTarMat").value = t.materiali || "si";
 }
+$("#bSalvaTar").addEventListener("click", async () => {
+  S.settings.tariffe = {ora:num($("#sTarOra").value), viaggio:num($("#sTarViag").value), materiali:$("#sTarMat").value};
+  if (await salvaSettings(true)) toast("Tariffe salvate");
+});
 $("#sLogo").addEventListener("change", e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
   const img = new Image(); const rd = new FileReader();
@@ -978,6 +987,167 @@ function editTicket(t){
 }
 async function openTicket(id){ await loadTicket(); const t = S.ticket.find(x => String(x.id) === String(id)); show("assistenza"); if (t) editTicket(t); else toast("Ticket non trovato"); }
 
+/* ---------------------------------------------------------------- rapportini dei tecnici */
+S.rap = []; S.rapCaricati = false;
+const RAP_COLS = "id,numero,data,cliente,commessa,indirizzo,tecnico,tipo,stato,descrizione,note,tot_lav,tot_str,tot_sab,tot_fest,tot_viag,materiali,operai,firmato,email_cliente,mail_cliente_at,proforma,created_at,synced_at";
+async function loadRap(){
+  let tutti = [], da = 0;
+  while (true){
+    const {data, error} = await S.sb.from("rapportini").select(RAP_COLS).order("data", {ascending:false, nullsFirst:false}).order("id", {ascending:false}).range(da, da + 999);
+    if (error){ if (!/does not exist|schema cache|permission/i.test(error.message||"")) toast(errMsg(error)); else $("#rapList").innerHTML = `<div class="empty"><b>Rapportini non disponibili</b>Manca l'abilitazione nel database (script rapportini-gestionale.sql).</div>`; return; }
+    tutti = tutti.concat(data || []); if (!data || data.length < 1000) break; da += 1000;
+  }
+  S.rap = tutti; S.rapCaricati = true;
+  const tec = [...new Set(tutti.map(r => (r.tecnico||"").trim()).filter(Boolean))].sort();
+  const sel = $("#rapTec"), cur = sel.value; sel.innerHTML = `<option value="">Tutti i tecnici</option>` + tec.map(t => `<option${t===cur?" selected":""}>${esc(t)}</option>`).join("");
+  if (!$("#v-rapportini").hidden) renderRap();
+  if (!$("#v-home").hidden) renderHome();
+}
+const oreR = r => num(r.tot_lav) + num(r.tot_str) + num(r.tot_sab) + num(r.tot_fest);
+function filtraRap(){
+  const per = $("#rapPer").value, tec = $("#rapTec").value, st = $("#rapStato").value, q = $("#qRap").value.trim().toLowerCase();
+  const oggi = new Date(), y = oggi.getFullYear(), m = oggi.getMonth();
+  const iso = d => d.toISOString().slice(0,10);
+  let da = "", a = "9999";
+  if (per === "mese") da = iso(new Date(Date.UTC(y, m, 1)));
+  if (per === "mesePrec"){ da = iso(new Date(Date.UTC(y, m-1, 1))); a = iso(new Date(Date.UTC(y, m, 0))); }
+  if (per === "30") da = iso(new Date(Date.now() - 30*864e5));
+  if (per === "anno") da = `${y}-01-01`;
+  return S.rap.filter(r => { const d = String(r.data||r.created_at||"").slice(0,10);
+    if (da && (d < da || d > a)) return false;
+    if (tec && (r.tecnico||"").trim() !== tec) return false;
+    if (st === "firmati" && !r.firmato) return false; if (st === "nonfirmati" && r.firmato) return false;
+    if (st === "daFatt" && r.proforma) return false; if (st === "fatt" && !r.proforma) return false;
+    return !q || [r.numero, r.cliente, r.descrizione, r.note, r.tecnico, r.indirizzo].join(" ").toLowerCase().includes(q); });
+}
+function ticketDiRap(r){ const n = String(r.numero||""); return (S.ticket||[]).find(t => String(t.rapportino||"").split(/\s*,\s*/).includes(n)); }
+function renderRap(){
+  if (!S.rapCaricati){ $("#rapList").innerHTML = `<div class="empty">Caricamento…</div>`; return; }
+  const L = filtraRap();
+  const tot = k => L.reduce((s, r) => s + num(r[k]), 0);
+  const kpi = [["Rapportini", L.length, ""], ["Ore lavoro", fmtN.format(tot("tot_lav")+tot("tot_sab")+tot("tot_fest")), "h"], ["Straordinari", fmtN.format(tot("tot_str")), "h"], ["Viaggio", fmtN.format(tot("tot_viag")), "h"],
+    ["Firmati", L.filter(r => r.firmato).length + " / " + L.length, ""], ["Senza proforma", L.filter(r => !r.proforma).length, ""]];
+  $("#rapKpi").innerHTML = kpi.map(k => `<div class="kpi-c"><small>${k[0]}</small><b>${k[1]}<span>${k[2]}</span></b></div>`).join("");
+  $("#rapList").innerHTML = L.length ? `<div class="tablewrap" style="border:0"><table class="list"><thead><tr><th>N.</th><th>Data</th><th>Cliente</th><th>Tecnico</th><th class="r">Ore</th><th class="r">Viaggio</th><th>Avanz.</th><th></th></tr></thead><tbody>
+    ${L.map(r => { const tk = ticketDiRap(r); return `<tr class="click" data-id="${r.id}"><td><b>${esc(r.numero)}</b></td><td>${fmtDate(r.data)}</td>
+      <td>${esc(r.cliente||"—")}<div class="hint">${esc(String(r.descrizione||r.note||"").slice(0,90))}</div></td><td>${esc(r.tecnico||"")}</td>
+      <td class="r">${fmtN.format(oreR(r))}</td><td class="r">${fmtN.format(num(r.tot_viag))}</td><td>${parseInt(r.stato)||0}%</td>
+      <td class="nowrap">${r.firmato?'<span class="chip good">Firmato</span>':''} ${tk?`<span class="chip navy">${esc(tk.numero)}</span>`:''} ${r.proforma?`<span class="chip">Proforma ${esc(r.proforma.numero||"")}</span>`:''}</td></tr>`; }).join("")}
+    </tbody></table></div>` : `<div class="empty"><b>Nessun rapportino</b>Nessun rapportino nel periodo e con i filtri scelti.</div>`;
+}
+["#rapPer","#rapTec","#rapStato"].forEach(id => $(id).addEventListener("change", renderRap));
+$("#qRap").addEventListener("input", renderRap);
+$("#bRapAggiorna").addEventListener("click", loadRap);
+$("#rapList").addEventListener("click", e => { const tr = e.target.closest("tr[data-id]"); if (tr) apriRap(+tr.dataset.id); });
+async function apriRap(id){
+  const r = S.rap.find(x => x.id === id); if (!r) return;
+  const {data: f} = await S.sb.from("rapportini").select("firme").eq("id", id).maybeSingle();
+  const firme = (f && f.firme) || {}, tk = ticketDiRap(r);
+  const mats = (r.materiali||[]).filter(m => m && (m.desc||m.descrizione));
+  const ops = (r.operai||[]).filter(o => o && o.nome);
+  const L = openLayer(`<div class="dialog wide rapdlg">
+    <div class="rap-h"><div><small>Rapportino</small><h2>N. ${esc(r.numero)}</h2><div class="hint">${fmtDate(r.data)} · ${esc(r.tecnico||"")}${tk?` · ticket ${esc(tk.numero)}`:""}</div></div>
+      <div class="row">${r.firmato?'<span class="chip good">Firmato</span>':'<span class="chip">Non firmato</span>'}<span class="chip navy">${parseInt(r.stato)||0}%</span>${r.proforma?`<span class="chip">Proforma ${esc(r.proforma.numero||"")}</span>`:""}</div></div>
+    <div class="grid g3 rap-info">
+      <div><small>Cliente</small><b>${esc(r.cliente||"—")}</b></div><div><small>Indirizzo</small><b>${esc(r.indirizzo||"—")}</b></div>
+      <div><small>Email cliente</small><b>${esc(r.email_cliente||"—")}${r.mail_cliente_at?' <span class="hint">✓ inviata</span>':''}</b></div>
+    </div>
+    ${r.note?`<div class="rap-box"><small>Richiesta del cliente</small><p>${esc(r.note)}</p></div>`:""}
+    <div class="rap-box"><small>Descrizione intervento</small><p>${esc(r.descrizione||"—")}</p></div>
+    ${ops.length?`<div class="sec-t">Operai e ore</div><table class="list"><thead><tr><th>Operaio</th><th class="r">Ord.</th><th class="r">Str.</th><th class="r">Sab.</th><th class="r">Fest.</th><th class="r">Viag.</th></tr></thead><tbody>
+      ${ops.map(o => `<tr><td>${esc(o.nome)}</td>${["oreLav","oreStr","oreSab","oreFest","oreViag"].map(k => `<td class="r">${fmtN.format(num(o[k]))}</td>`).join("")}</tr>`).join("")}</tbody></table>`:""}
+    ${mats.length?`<div class="sec-t">Materiali</div><table class="list"><thead><tr><th>Materiale</th><th class="r">Q.tà</th><th>U.m.</th></tr></thead><tbody>
+      ${mats.map(m => `<tr><td>${esc(m.desc||m.descrizione)}</td><td class="r">${esc(m.qty??m.qta??"")}</td><td>${esc(m.unit||m.um||"")}</td></tr>`).join("")}</tbody></table>`:""}
+    ${(firme.tecnico||firme.cliente)?`<div class="sec-t">Firme</div><div class="grid g2 rap-firme"><div><small>Tecnico</small>${firme.tecnico?`<img src="${esc(firme.tecnico)}" alt="Firma tecnico">`:"—"}</div><div><small>Cliente</small>${firme.cliente?`<img src="${esc(firme.cliente)}" alt="Firma cliente">`:"—"}</div></div>`:""}
+    <div class="foot"><button class="btn ghost" data-x="mod" type="button" style="margin-right:auto">Modifica testi</button>
+      <button class="btn" data-x="stampa" type="button">Stampa / PDF</button>
+      ${r.proforma&&r.proforma.url?`<a class="btn" href="${esc(r.proforma.url)}" target="_blank" rel="noopener">Apri proforma ↗</a>`:""}
+      <button class="btn fic" data-x="fic" type="button">${r.proforma?"Nuova proforma":"Crea proforma"}</button>
+      <button class="btn primary" data-x="no" type="button">Chiudi</button></div></div>`);
+  L.addEventListener("click", e => { const x = e.target.closest("[data-x]"); if (!x) return;
+    if (x.dataset.x === "no") return closeLayer();
+    if (x.dataset.x === "stampa") return stampaRap(r, firme);
+    if (x.dataset.x === "fic") return proformaRap(r);
+    if (x.dataset.x === "mod") return modificaRap(r); });
+}
+function modificaRap(r){
+  const L = openLayer(`<div class="dialog"><h2>Rapportino ${esc(r.numero)}</h2><div class="grid">
+    <label class="f">Cliente<input data-r="cliente" value="${esc(r.cliente||"")}" list="dlClienti"></label>
+    <label class="f">Indirizzo<input data-r="indirizzo" value="${esc(r.indirizzo||"")}"></label>
+    <label class="f">Email cliente<input data-r="email_cliente" type="email" value="${esc(r.email_cliente||"")}"></label>
+    <label class="f">Richiesta del cliente<textarea data-r="note" rows="3">${esc(r.note||"")}</textarea></label>
+    <label class="f">Descrizione intervento<textarea data-r="descrizione" rows="5">${esc(r.descrizione||"")}</textarea></label></div>
+    <p class="hint">Ore, materiali e firme si correggono solo dall'app del tecnico.</p>
+    <div class="foot"><button class="btn" data-x="no" type="button">Annulla</button><button class="btn primary" data-x="ok" type="button">Salva</button></div></div>`);
+  L.addEventListener("click", async e => { const x = e.target.closest("[data-x]"); if (!x) return;
+    if (x.dataset.x === "no"){ closeLayer(); return apriRap(r.id); }
+    const upd = {}; $$("[data-r]", L).forEach(i => upd[i.dataset.r] = i.value.trim()); upd.email_cliente = upd.email_cliente.toLowerCase() || null;
+    const {error} = await S.sb.from("rapportini").update(upd).eq("id", r.id); if (error) return toast(errMsg(error));
+    Object.assign(r, upd); closeLayer(); renderRap(); toast("Rapportino aggiornato"); apriRap(r.id); });
+}
+function stampaRap(r, firme){
+  const a = S.settings.azienda || {}, ops = (r.operai||[]).filter(o => o && o.nome), mats = (r.materiali||[]).filter(m => m && (m.desc||m.descrizione));
+  const w = window.open("", "_blank"); if (!w) return toast("Consenti le finestre pop-up per stampare");
+  w.document.write(`<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Rapportino ${esc(r.numero)}</title><style>
+    body{font-family:Inter,system-ui,sans-serif;color:#16202b;max-width:780px;margin:24px auto;padding:0 20px;font-size:13px}
+    .h{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #f08a00;padding-bottom:10px;margin-bottom:16px}
+    .h img{height:54px}.h .n{text-align:right}.h .n b{font-size:20px;display:block}
+    .g{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 18px;margin-bottom:14px}.g small,.b small{display:block;font-size:10px;text-transform:uppercase;color:#6b7684;letter-spacing:.05em}
+    .b{background:#f5f6f8;border-radius:8px;padding:10px 12px;margin:10px 0;white-space:pre-wrap}
+    table{width:100%;border-collapse:collapse;margin:6px 0 12px}th{font-size:10px;text-transform:uppercase;color:#6b7684;text-align:left;border-bottom:1px solid #ccd;padding:5px 4px}td{border-bottom:1px solid #eef;padding:5px 4px}.r{text-align:right}
+    .f{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:30px}.f div{border-top:1px solid #999;padding-top:6px;font-size:11px;color:#6b7684}.f img{height:70px;display:block;margin-top:6px}
+    h4{font-size:11px;text-transform:uppercase;color:#6b7684;margin:16px 0 4px;letter-spacing:.05em}</style></head><body>
+    <div class="h"><div>${a.logo?`<img src="${esc(a.logo)}" alt="">`:""}<div><b>${esc(a.nome||"TC Sistem")}</b></div></div><div class="n">Rapportino di lavoro<b>N. ${esc(r.numero)}</b>${fmtDate(r.data)}</div></div>
+    <div class="g"><div><small>Cliente</small>${esc(r.cliente||"—")}</div><div><small>Indirizzo</small>${esc(r.indirizzo||"—")}</div><div><small>Tecnico</small>${esc(r.tecnico||"—")}</div>
+      <div><small>Email cliente</small>${esc(r.email_cliente||"—")}</div><div><small>Avanzamento</small>${parseInt(r.stato)||0}%</div><div><small>Commessa</small>${esc(r.commessa||"—")}</div></div>
+    ${r.note?`<div class="b"><small>Richiesta del cliente</small>${esc(r.note)}</div>`:""}<div class="b"><small>Descrizione intervento</small>${esc(r.descrizione||"—")}</div>
+    ${ops.length?`<h4>Operai e ore</h4><table><tr><th>Operaio</th><th class="r">Ord.</th><th class="r">Str.</th><th class="r">Sab.</th><th class="r">Fest.</th><th class="r">Viag.</th></tr>${ops.map(o => `<tr><td>${esc(o.nome)}</td>${["oreLav","oreStr","oreSab","oreFest","oreViag"].map(k => `<td class="r">${fmtN.format(num(o[k]))}</td>`).join("")}</tr>`).join("")}</table>`:""}
+    ${mats.length?`<h4>Materiali</h4><table><tr><th>Materiale</th><th class="r">Q.tà</th><th>U.m.</th></tr>${mats.map(m => `<tr><td>${esc(m.desc||m.descrizione)}</td><td class="r">${esc(m.qty??m.qta??"")}</td><td>${esc(m.unit||m.um||"")}</td></tr>`).join("")}</table>`:""}
+    <div class="f"><div>Firma tecnico${firme.tecnico?`<img src="${esc(firme.tecnico)}">`:""}</div><div>Firma cliente${firme.cliente?`<img src="${esc(firme.cliente)}">`:""}</div></div>
+    <script>window.onload=()=>setTimeout(()=>print(),300)<\/script></body></html>`);
+  w.document.close();
+}
+function proformaRap(r){
+  const t = S.settings.tariffe || {}, ore = oreR(r), viag = num(r.tot_viag);
+  const rif = `Rapportino n. ${r.numero} del ${fmtDate(r.data)}`;
+  const righe = [{descr: `${rif}\n${(r.descrizione||"").trim() || "Intervento tecnico"}`, qta: ore || 1, um: ore ? "h" : "", prezzo: t.ora || 0}];
+  if (viag) righe.push({descr: "Viaggio", qta: viag, um: "h", prezzo: t.viaggio || 0});
+  if ((t.materiali || "si") === "si") (r.materiali||[]).filter(m => m && (m.desc||m.descrizione)).forEach(m => righe.push({descr: m.desc || m.descrizione, qta: num(m.qty ?? m.qta) || 1, um: m.unit || m.um || "", prezzo: 0}));
+  const cand = S.clienti.find(c => c.rs.toLowerCase() === String(r.cliente||"").trim().toLowerCase()) || clientiSimili(r.cliente||"")[0];
+  const riga = (x, i) => `<tr data-i="${i}"><td class="in"><textarea data-k="descr" rows="${i?1:3}">${esc(x.descr)}</textarea></td><td class="in"><input data-k="qta" class="n w60" value="${inN(x.qta)}"></td>
+    <td class="in"><input data-k="um" class="w60" value="${esc(x.um)}"></td><td class="in"><input data-k="prezzo" class="n w80" value="${inN(x.prezzo)}"></td><td class="c tot" data-t></td><td><button class="btn sm ghost danger" data-del="${i}" type="button" title="Togli">✕</button></td></tr>`;
+  const L = openLayer(`<div class="dialog wide"><h2>Proforma dal rapportino ${esc(r.numero)}</h2>
+    <div class="grid g2"><label class="f">Cliente in anagrafica<input id="pfCli" list="dlClienti" value="${esc(cand ? cand.rs : r.cliente||"")}"><div class="suggest" id="pfSugg"></div></label>
+      <div class="hint" style="align-self:end">Nel rapportino: <b>${esc(r.cliente||"—")}</b>. Se il cliente non è in Fatture in Cloud viene aggiunto all'anagrafica.</div></div>
+    <div class="tablewrap" style="margin-top:12px"><table class="righe wx" style="min-width:640px"><thead><tr><th>Descrizione</th><th>Q.tà</th><th>U.m.</th><th>Prezzo €</th><th class="r">Totale</th><th></th></tr></thead><tbody id="pfRighe">${righe.map(riga).join("")}</tbody></table></div>
+    <div class="row" style="margin-top:8px"><button class="btn sm" id="pfAdd" type="button">+ Riga</button><span class="sp"></span><b id="pfTot"></b><span class="hint">+ IVA 22%</span></div>
+    ${r.proforma?`<p class="hint">Attenzione: per questo rapportino c'è già la proforma n. ${esc(r.proforma.numero||"")}.</p>`:""}
+    <div class="foot"><button class="btn" data-x="no" type="button">Annulla</button><button class="btn fic" data-x="ok" type="button">Crea proforma in Fatture in Cloud</button></div></div>`);
+  const leggi = () => $$("#pfRighe tr", L).map(tr => ({descr: $('[data-k="descr"]', tr).value, qta: num($('[data-k="qta"]', tr).value), um: $('[data-k="um"]', tr).value, prezzo: num($('[data-k="prezzo"]', tr).value)}));
+  const totali = () => { let T = 0; $$("#pfRighe tr", L).forEach(tr => { const v = r2(num($('[data-k="qta"]', tr).value) * num($('[data-k="prezzo"]', tr).value)); T += v; $("[data-t]", tr).textContent = eur(v); }); $("#pfTot", L).textContent = "Imponibile " + eur(T); };
+  const sugg = () => { const v = $("#pfCli", L).value.trim(), ok = S.clienti.find(c => c.rs.toLowerCase() === v.toLowerCase());
+    $("#pfSugg", L).innerHTML = ok ? `<span class="chip good">In anagrafica${ok.piva?" · P.IVA "+esc(ok.piva):""}</span>` : (clientiSimili(v).length ? `<span class="hint">Forse è:</span>` + clientiSimili(v).map(c => `<button type="button" class="btn sm" data-rs="${esc(c.rs)}">${esc(c.rs)}</button>`).join("") : `<span class="hint">Non in anagrafica: in Fatture in Cloud verrà cercato per nome</span>`); };
+  totali(); sugg();
+  L.addEventListener("input", e => { if (e.target.id === "pfCli") sugg(); else totali(); });
+  L.addEventListener("click", async e => {
+    const rs = e.target.closest("[data-rs]"); if (rs){ $("#pfCli", L).value = rs.dataset.rs; return sugg(); }
+    const del = e.target.closest("[data-del]"); if (del){ del.closest("tr").remove(); return totali(); }
+    if (e.target.id === "pfAdd"){ $("#pfRighe", L).insertAdjacentHTML("beforeend", riga({descr:"", qta:1, um:"", prezzo:0}, Date.now())); return totali(); }
+    const x = e.target.closest("[data-x]"); if (!x) return;
+    if (x.dataset.x === "no"){ closeLayer(); return apriRap(r.id); }
+    const nomeCli = $("#pfCli", L).value.trim(), cli = S.clienti.find(c => c.rs.toLowerCase() === nomeCli.toLowerCase());
+    const R = leggi().filter(z => z.descr.trim() && z.qta);
+    if (!nomeCli) return toast("Indica il cliente"); if (!R.length) return toast("Nessuna riga");
+    if (R.every(z => !z.prezzo) && !confirm("Tutte le righe hanno prezzo 0. Creare comunque la proforma?")) return;
+    x.disabled = true; x.textContent = "Creazione in corso…";
+    try{
+      const d = await chiamaFic({azione:"proforma_rapportino", rapportino_id: r.id, cliente_id: cli ? cli.id : null, cliente: nomeCli, righe: R, di_nuovo: !!r.proforma});
+      r.proforma = {id: d.id, numero: d.numero, data: d.data, url: d.url, totale: d.totale};
+      closeLayer(); renderRap(); toast(`Proforma ${d.numero} creata in Fatture in Cloud${d.cliente_creato?" (cliente aggiunto in anagrafica)":""}`); apriRap(r.id);
+    }catch(err){ x.disabled = false; x.textContent = "Crea proforma in Fatture in Cloud"; toast(err.message); }
+  });
+}
+
 /* ---------------------------------------------------------------- Fatture in Cloud */
 async function chiamaFic(body){
   if (S.prova) throw new Error("In modalità prova Fatture in Cloud non è disponibile.");
@@ -1073,7 +1243,7 @@ async function startApp(user){
   $("#userName").textContent = S.profilo.nome || user.email;
   $("#loginRoot").hidden = true; $("#appRoot").hidden = false;
   await loadVersioni();
-  await Promise.all([loadListino(), loadClienti(), loadArchivio(), loadTicket(), loadTecnici().catch(()=>{})]);
+  await Promise.all([loadListino(), loadClienti(), loadArchivio(), loadTicket(), loadTecnici().catch(()=>{}), loadRap().catch(()=>{})]);
   fillDatalists();
   const bozza = lsGet(draftKey(), null);
   if (bozza && bozza.righe){ S.offer = bozza; S.dirty = true; toast("Ripresa l'offerta che stavi scrivendo (non salvata)"); }
