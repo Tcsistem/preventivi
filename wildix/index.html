@@ -6,8 +6,8 @@
 <title>TC Sistem Preventivi</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="../css/app.css?v=202611281616">
-<link rel="stylesheet" href="css/wx.css?v=202611281616">
+<link rel="stylesheet" href="../css/app.css?v=202611281626">
+<link rel="stylesheet" href="css/wx.css?v=202611281626">
 </head>
 <body>
 
@@ -44,6 +44,7 @@
   <nav class="tabs" role="tablist">
     <button class="tab" role="tab" data-view="offerta" aria-selected="true">Offerta</button>
     <button class="tab" role="tab" data-view="archivio" aria-selected="false">Archivio</button>
+    <button class="tab" role="tab" data-view="assistenza" aria-selected="false">Assistenza <span class="badge" id="tkBadge" hidden></span></button>
     <button class="tab" role="tab" data-view="clienti" aria-selected="false">Clienti</button>
     <button class="tab" role="tab" data-view="materiali" aria-selected="false">Materiali</button>
     <button class="tab" role="tab" data-view="listini" aria-selected="false">Listini Wildix</button>
@@ -198,6 +199,28 @@
   </div>
 </section>
 
+<!-- ============ ASSISTENZA ============ -->
+<section class="view" id="v-assistenza" hidden>
+  <div class="card">
+    <div class="card-h"><h2>Assistenza</h2>
+      <div class="seg" role="group" aria-label="Filtro" id="segTk">
+        <button type="button" data-f="aperti" aria-pressed="true">Aperti</button>
+        <button type="button" data-f="Nuovo" aria-pressed="false">Nuovi</button>
+        <button type="button" data-f="Pianificato" aria-pressed="false">Pianificati</button>
+        <button type="button" data-f="Chiuso" aria-pressed="false">Chiusi</button>
+        <button type="button" data-f="" aria-pressed="false">Tutti</button>
+      </div>
+      <div class="sp row">
+        <input class="inp search" id="qTk" type="search" placeholder="Cerca numero, cliente, oggetto, tecnico">
+        <button class="btn sm" id="bTkAggiorna" type="button" title="Aggiorna">↻</button>
+        <button class="btn primary" id="bNuovoTk" type="button">+ Nuovo ticket</button>
+      </div>
+    </div>
+    <div id="tkList"></div>
+    <p class="hint">Le richieste arrivano dal bot di assistenza (clienti e interni), dalle email lette dall'AI o si inseriscono a mano.</p>
+  </div>
+</section>
+
 <!-- ============ CLIENTI ============ -->
 <section class="view" id="v-clienti" hidden>
   <div class="card">
@@ -305,8 +328,8 @@
 <div id="printArea"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="js/config.js?v=202611281616"></script>
-<script src="js/prova.js?v=202611281616"></script>
-<script src="js/app.js?v=202611281616"></script>
+<script src="js/config.js?v=202611281626"></script>
+<script src="js/prova.js?v=202611281626"></script>
+<script src="js/app.js?v=202611281626"></script>
 </body>
 </html>

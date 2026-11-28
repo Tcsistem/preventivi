@@ -5,8 +5,9 @@
   const now = () => new Date(Date.now() + (window.__tick = (window.__tick||0) + 1)).toISOString();
   const KEY = "wx-prev-prova-db";
   const U = {id:"prova", email:"prova@locale"};
-  const vuoto = () => ({wx_utenti:[{user_id:"prova", nome:"Prova", email:"prova@locale"}], wx_clienti:[], wx_listino:[], wx_offerte:[], wx_impostazioni:[{id:1, dati:{}}], _seq:1});
+  const vuoto = () => ({wx_utenti:[{user_id:"prova", nome:"Prova", email:"prova@locale"}], wx_clienti:[], wx_listino:[], wx_offerte:[], wx_impostazioni:[{id:1, dati:{}}], wx_ticket:[], operai:[{id:1,nome:"Mario Rossi"},{id:2,nome:"Luca Bianchi"}], _seq:1});
   let DB; try{ DB = JSON.parse(localStorage.getItem(KEY)) || vuoto(); }catch(e){ DB = vuoto(); }
+  const V0 = vuoto(); for (const k in V0) if (!(k in DB)) DB[k] = V0[k];
   const salva = () => { try{ localStorage.setItem(KEY, JSON.stringify(DB)); }catch(e){ console.warn("Spazio del browser pieno", e); } };
   let session = {user:U};
   class Q {
@@ -60,6 +61,10 @@
       if (fn==="wx_versioni_listino"){
         const m = new Map(); DB.wx_listino.forEach(r=>{ const k=r.versione+"|"+r.listino; m.set(k,(m.get(k)||0)+1); });
         return {data:[...m].map(([k,n])=>{ const [versione,listino]=k.split("|"); return {versione, listino, righe:n}; }), error:null};
+      }
+      if (fn==="wx_prossimo_ticket"){
+        const yy=String(new Date().getFullYear()).slice(2); let m=0; (DB.wx_ticket||[]).forEach(o=>{ const x=String(o.numero).match(/^T(\d+)-(\d{2})$/); if(x&&x[2]===yy) m=Math.max(m,+x[1]); });
+        return {data:`T${String(m+1).padStart(3,"0")}-${yy}`, error:null};
       }
       if (fn==="wx_prossimo_numero"){
         const yy=String(new Date().getFullYear()).slice(2); let m=0;

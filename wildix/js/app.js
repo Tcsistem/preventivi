@@ -201,6 +201,7 @@ function show(view){
   if (view==="clienti") renderClienti();
   if (view==="listini") renderListini();
   if (view==="materiali") renderMiei();
+  if (view==="assistenza"){ renderTicket(); loadTicket(); }
   if (view==="impostazioni") renderSettings();
   window.scrollTo(0,0);
 }
@@ -822,6 +823,106 @@ $("#bAnteprima").addEventListener("click", () => {
 });
 $("#bInterno").addEventListener("click", () => stampa(paperInterno(S.offer), nomeFile(S.offer, "INTERNO Analisi")));
 
+/* ---------------------------------------------------------------- assistenza (ticket) */
+const TK_STATI = ["Nuovo","In carico","Pianificato","In attesa cliente","Chiuso"];
+const TK_PRIO = ["Bassa","Normale","Alta","Urgente"];
+const tkChip = s => s==="Nuovo"?"red":s==="Chiuso"?"good":s==="Pianificato"?"navy":s==="In attesa cliente"?"":"warn";
+const prioChip = p => p==="Urgente"?"red":p==="Alta"?"warn":"";
+S.ticket = []; S.tecnici = []; S.tkFiltro = "aperti";
+async function loadTicket(){
+  const {data, error} = await S.sb.from("wx_ticket").select("*").order("created_at", {ascending:false}).range(0, 999);
+  if (error){ if (!/does not exist|schema cache/i.test(error.message||"")) toast(errMsg(error)); return; }
+  S.ticket = data || [];
+  const n = S.ticket.filter(t => t.stato === "Nuovo").length, b = $("#tkBadge");
+  b.textContent = n; b.hidden = !n;
+  if (!$("#v-assistenza").hidden) renderTicket();
+}
+async function loadTecnici(){
+  const {data} = await S.sb.from("operai").select("nome").order("nome");
+  S.tecnici = (data || []).map(o => o.nome).filter(Boolean);
+}
+function renderTicket(){
+  const q = $("#qTk").value.trim().toLowerCase(), f = S.tkFiltro;
+  const L = S.ticket.filter(t => (f === "" || (f === "aperti" ? t.stato !== "Chiuso" : t.stato === f)) &&
+    (!q || [t.numero,t.cliente,t.richiedente,t.oggetto,t.tecnico,t.descrizione].join(" ").toLowerCase().includes(q)));
+  $("#tkList").innerHTML = L.length ? `<div class="tablewrap" style="border:0"><table class="list"><thead><tr><th>Nr.</th><th>Aperto</th><th>Stato</th><th>Priorità</th><th>Cliente / richiedente</th><th>Oggetto</th><th>Tecnico</th><th>Intervento</th><th>Canale</th></tr></thead><tbody>
+    ${L.map(t => `<tr class="click" data-id="${esc(t.id)}"><td><b>${esc(t.numero)}</b></td><td class="hint">${new Date(t.created_at).toLocaleString("it-IT",{dateStyle:"short",timeStyle:"short"})}</td>
+      <td><span class="chip ${tkChip(t.stato)}">${esc(t.stato)}</span></td><td>${t.priorita!=="Normale"?`<span class="chip ${prioChip(t.priorita)}">${esc(t.priorita)}</span>`:"Normale"}</td>
+      <td>${esc(t.cliente||"—")}${t.richiedente?`<div class="hint">${esc(t.richiedente)}${t.telefono?" · "+esc(t.telefono):""}</div>`:""}</td>
+      <td>${esc(t.oggetto)}</td><td>${esc(t.tecnico)}</td><td>${fmtDate(t.data_intervento)}</td><td class="hint">${esc(t.canale)}</td></tr>`).join("")}
+    </tbody></table></div>` : `<div class="empty"><b>Nessun ticket</b>${f==="aperti"?"Non ci sono richieste aperte.":"Nessun ticket con questo filtro."}</div>`;
+}
+$("#segTk").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; S.tkFiltro = b.dataset.f;
+  $$("#segTk button").forEach(x => x.setAttribute("aria-pressed", String(x===b))); renderTicket(); });
+$("#qTk").addEventListener("input", renderTicket);
+$("#bTkAggiorna").addEventListener("click", loadTicket);
+$("#tkList").addEventListener("click", e => { const tr = e.target.closest("tr[data-id]"); if (tr) editTicket(S.ticket.find(t => String(t.id) === tr.dataset.id)); });
+$("#bNuovoTk").addEventListener("click", () => editTicket(null));
+function editTicket(t){
+  const nuovo = !t;
+  t = t ? clone(t) : {stato:"Nuovo", priorita:"Normale", canale:"manuale", cliente:"", cliente_id:null, richiedente:"", telefono:"", email:"", indirizzo:"", oggetto:"", descrizione:"", tecnico:"", data_intervento:"", note_interne:"", storico:[], rapportino:""};
+  const sel = (k, opts) => `<select data-t="${k}">${opts.map(o=>`<option${t[k]===o?" selected":""}>${esc(o)}</option>`).join("")}</select>`;
+  const storico = (t.storico||[]).slice().reverse().map(m => `<div class="tkmsg"><small>${new Date(m.quando).toLocaleString("it-IT",{dateStyle:"short",timeStyle:"short"})} · ${esc(m.chi||"")}</small>${esc(m.testo).replace(/\n/g,"<br>")}</div>`).join("");
+  const L = openLayer(`<div class="dialog wide"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">${nuovo?"Nuovo ticket":"Ticket "+esc(t.numero)}</h2>
+      ${nuovo?"":`<span class="chip ${tkChip(t.stato)}">${esc(t.stato)}</span><span class="hint">aperto il ${new Date(t.created_at).toLocaleString("it-IT",{dateStyle:"short",timeStyle:"short"})} da ${esc(t.canale)}</span>`}</div>
+    <div class="grid g4">
+      <label class="f span2">Cliente<input data-t="cliente" list="dlClienti" value="${esc(t.cliente)}" placeholder="Cerca in anagrafica o scrivi il nome"></label>
+      <label class="f">Stato${sel("stato", TK_STATI)}</label>
+      <label class="f">Priorità${sel("priorita", TK_PRIO)}</label>
+      <label class="f">Richiedente<input data-t="richiedente" value="${esc(t.richiedente)}"></label>
+      <label class="f">Telefono<input data-t="telefono" value="${esc(t.telefono)}"></label>
+      <label class="f span2">Email<input data-t="email" value="${esc(t.email)}"></label>
+      <label class="f span4">Indirizzo intervento<input data-t="indirizzo" value="${esc(t.indirizzo)}"></label>
+      <label class="f span4">Oggetto<input data-t="oggetto" value="${esc(t.oggetto)}"></label>
+      <label class="f span4">Descrizione del problema<textarea data-t="descrizione" rows="4">${esc(t.descrizione)}</textarea></label>
+      <label class="f">Tecnico<input data-t="tecnico" list="dlTecnici" value="${esc(t.tecnico)}"><datalist id="dlTecnici">${S.tecnici.map(n=>`<option value="${esc(n)}">`).join("")}</datalist></label>
+      <label class="f">Data intervento<input data-t="data_intervento" type="date" value="${esc(t.data_intervento||"")}"></label>
+      <label class="f span2">Rapportino collegato (numero)<input data-t="rapportino" value="${esc(t.rapportino||"")}"></label>
+      <label class="f span4">Note interne (non visibili al cliente)<textarea data-t="note_interne" rows="2">${esc(t.note_interne)}</textarea></label>
+    </div>
+    ${nuovo?"":`<div class="sec-t">Storico</div><div class="row" style="align-items:flex-start"><textarea class="inp" id="tkNota" rows="2" placeholder="Aggiungi una nota allo storico…" style="flex:1"></textarea><button class="btn" data-x="nota" type="button">Aggiungi</button></div><div class="tkstorico">${storico||'<p class="hint">Nessuna voce.</p>'}</div>`}
+    <div class="foot">${nuovo?"":`<button class="btn ghost danger" data-x="del" type="button" style="margin-right:auto">Elimina</button>${t.stato!=="Chiuso"?`<button class="btn" data-x="chiudi" type="button">Chiudi ticket</button>`:""}`}
+      <button class="btn" data-x="no" type="button">Annulla</button><button class="btn primary" data-x="ok" type="button">Salva</button></div></div>`);
+  const leggi = () => { const r = {}; $$("[data-t]", L).forEach(i => r[i.dataset.t] = i.value.trim()); r.data_intervento = r.data_intervento || null;
+    const c = S.clienti.find(x => x.rs.toLowerCase() === r.cliente.toLowerCase()); r.cliente_id = c ? c.id : (r.cliente === t.cliente ? t.cliente_id : null);
+    if (c && !r.indirizzo) r.indirizzo = [c.ind, c.cap, c.citta, c.prov].filter(Boolean).join(" ");
+    if (r.stato === "Chiuso" && t.stato !== "Chiuso") r.chiuso_at = new Date().toISOString();
+    if (r.stato === "Nuovo" && (r.tecnico || r.data_intervento)) r.stato = r.data_intervento ? "Pianificato" : "In carico";
+    return r; };
+  const salva = async (extra) => {
+    const r = Object.assign(leggi(), extra || {});
+    if (!r.oggetto && !r.descrizione) { toast("Scrivi almeno oggetto o descrizione"); return false; }
+    const io = (S.profilo && S.profilo.nome) || S.user.email;
+    const cambi = nuovo ? [] : ["stato","tecnico","data_intervento","priorita"].filter(k => String(r[k]||"") !== String(t[k]||"")).map(k => `${k.replace("_"," ")}: ${r[k]||"—"}`);
+    let res;
+    if (nuovo){
+      const {data:num} = await S.sb.rpc("wx_prossimo_ticket");
+      r.numero = num || ("T" + Date.now()); r.storico = [{quando:new Date().toISOString(), chi:io, testo:"Ticket inserito a mano"}];
+      res = await S.sb.from("wx_ticket").insert(r);
+    } else {
+      if (cambi.length) r.storico = [...(t.storico||[]), {quando:new Date().toISOString(), chi:io, testo:cambi.join(" · ")}];
+      res = await S.sb.from("wx_ticket").update(r).eq("id", t.id);
+    }
+    if (res.error){ toast(errMsg(res.error)); return false; }
+    closeLayer(); await loadTicket(); toast(nuovo ? "Ticket " + r.numero + " creato" : "Ticket salvato"); return true;
+  };
+  L.addEventListener("click", async e => {
+    const x = e.target.closest("[data-x]"); if (!x) return;
+    if (x.dataset.x === "no") return closeLayer();
+    if (x.dataset.x === "ok") return salva();
+    if (x.dataset.x === "chiudi") return salva({stato:"Chiuso"});
+    if (x.dataset.x === "nota"){
+      const testo = $("#tkNota", L).value.trim(); if (!testo) return;
+      const storico = [...(t.storico||[]), {quando:new Date().toISOString(), chi:(S.profilo&&S.profilo.nome)||S.user.email, testo}];
+      const {error} = await S.sb.from("wx_ticket").update({storico}).eq("id", t.id); if (error) return toast(errMsg(error));
+      t.storico = storico; await loadTicket(); closeLayer(); editTicket(S.ticket.find(z => String(z.id) === String(t.id))); return;
+    }
+    if (x.dataset.x === "del") return confirmBox("Eliminare il ticket " + t.numero + "?", "Il ticket viene cancellato definitivamente.", "Elimina", async () => {
+      const {error} = await S.sb.from("wx_ticket").delete().eq("id", t.id); if (error) return toast(errMsg(error)); await loadTicket(); toast("Ticket eliminato"); }, true);
+  });
+}
+async function openTicket(id){ await loadTicket(); const t = S.ticket.find(x => String(x.id) === String(id)); show("assistenza"); if (t) editTicket(t); else toast("Ticket non trovato"); }
+
 /* ---------------------------------------------------------------- Fatture in Cloud */
 async function chiamaFic(body){
   if (S.prova) throw new Error("In modalità prova Fatture in Cloud non è disponibile.");
@@ -917,7 +1018,7 @@ async function startApp(user){
   $("#userName").textContent = S.profilo.nome || user.email;
   $("#loginRoot").hidden = true; $("#appRoot").hidden = false;
   await loadVersioni();
-  await Promise.all([loadListino(), loadClienti(), loadArchivio()]);
+  await Promise.all([loadListino(), loadClienti(), loadArchivio(), loadTicket(), loadTecnici().catch(()=>{})]);
   fillDatalists();
   const bozza = lsGet(draftKey(), null);
   if (bozza && bozza.righe){ S.offer = bozza; S.dirty = true; toast("Ripresa l'offerta che stavi scrivendo (non salvata)"); }
@@ -925,6 +1026,9 @@ async function startApp(user){
   loadOfferIntoForm(); setStatus();
   const h = location.hash.match(/offerta=([0-9a-f-]{36})/i);
   if (h){ history.replaceState(null, "", location.pathname + location.search); S.dirty = false; await openOffer(h[1]); }
+  const ht = location.hash.match(/ticket=([0-9a-f-]{36})/i);
+  if (ht){ history.replaceState(null, "", location.pathname + location.search); await openTicket(ht[1]); }
+  setInterval(() => { if (!document.hidden) loadTicket(); }, 60000);
   if (!S.listino.some(a => a.listino !== "PERSONALE")) banner2("Il database non ha ancora il listino Wildix: vai nella scheda Listini Wildix e premi “Carica listino incluso”.");
 }
 function banner(t){ const b=$("#banner"); b.textContent=t; b.hidden=false; }

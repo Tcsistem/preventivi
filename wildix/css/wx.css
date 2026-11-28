@@ -108,3 +108,9 @@ table.righe.wx td.in select.modo{min-width:0;width:100%;font-size:11px;padding:1
 
 .richiesta{background:var(--warn-soft);border:1px solid #e0b04a;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:13px}
 .richiesta .neg{font-weight:600}
+
+/* assistenza */
+.tab .badge{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:var(--accent);color:#fff;font-size:11px;line-height:18px;text-align:center;margin-left:4px}
+.tkstorico{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px 10px;margin-top:8px;background:var(--surface-2)}
+.tkmsg{padding:6px 0;border-top:1px solid var(--line);font-size:13px}.tkmsg:first-child{border-top:0}
+.tkmsg small{display:block;color:var(--muted);font-size:11px}
