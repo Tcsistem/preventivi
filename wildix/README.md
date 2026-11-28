@@ -62,3 +62,10 @@ Finché `config.js` ha i segnaposto il sito parte in **modalità prova**: nessun
 - `data/listino-2026-11.json` — listini Wildix Gold Novembre 2026 estratti dai PDF
 - `supabase/schema.sql` — tabelle `wx_*` con Row Level Security
 - `tools/listino_pdf.py` — PDF Wildix → file .json da importare
+
+## Assistenza (ticket)
+
+- Tabella `wx_ticket` (script `supabase/assistenza.sql`), numerazione `T001-26`, `T002-26`… che riparte ogni anno.
+- Sezione **Assistenza** nel gestionale: elenco con filtri (Aperti, Nuovi, Pianificati, Chiusi), badge con i ticket nuovi, scheda con stato, priorità, tecnico (dall'elenco operai dei rapportini), data intervento, note interne, storico e numero rapportino collegato. Link diretto `#ticket=<id>`.
+- Funzione `wx-assist` (Verify JWT disattivato, chiave `WX_BOT_KEY`): azioni `apri_ticket`, `stato_ticket`, `aggiungi_nota`. Il cliente viene riconosciuto lato server (P.IVA, email o ragione sociale); al bot non tornano mai dati di altri clienti.
+- Wildix (Wilma): strumenti `apri_ticket` e `stato_ticket` (categoria Assistenza, credenziale wx-bot) e agente **Assistenza TC Sistem** sul canale Chat, con `avvisa_ufficio` per l'avviso nella chat dell'ufficio. L'agente non ha gli strumenti dei preventivi (niente ricerca clienti né listini).
