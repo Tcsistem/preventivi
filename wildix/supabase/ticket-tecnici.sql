@@ -49,7 +49,7 @@ begin
   if not public.rap_pin_ok(pin) then raise exception 'PIN non valido'; end if;
   return coalesce((select jsonb_agg(jsonb_build_object(
       'id', t.id, 'numero', t.numero, 'stato', t.stato, 'priorita', t.priorita, 'cliente', t.cliente,
-      'richiedente', t.richiedente, 'telefono', t.telefono, 'indirizzo', t.indirizzo, 'oggetto', t.oggetto,
+      'richiedente', t.richiedente, 'telefono', t.telefono, 'email', t.email, 'indirizzo', t.indirizzo, 'oggetto', t.oggetto,
       'descrizione', t.descrizione, 'tecnico', t.tecnico, 'data_intervento', t.data_intervento,
       'rapportino', t.rapportino, 'created_at', t.created_at)
       order by (t.stato = 'Chiuso'), case t.priorita when 'Urgente' then 0 when 'Alta' then 1 when 'Normale' then 2 else 3 end, t.created_at)
