@@ -126,3 +126,20 @@ revoke execute on function public.wx_imposta_pin_tecnici(text), public.wx_pin_te
 grant execute on function public.wx_imposta_pin_tecnici(text), public.wx_pin_tecnici_impostato() to authenticated;
 grant execute on function public.rap_ticket_lista(text), public.rap_ticket_prendi(text, uuid, text),
   public.rap_ticket_rapportino(text, uuid, text, text, boolean), public.rap_push_registra(text, jsonb, text) to anon, authenticated;
+
+-- il tecnico chiude il ticket a intervento concluso
+create or replace function public.rap_ticket_chiudi(pin text, ticket uuid, tecnico text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare t public.wx_ticket;
+begin
+  if not public.rap_pin_ok(pin) then raise exception 'PIN non valido'; end if;
+  update public.wx_ticket set stato = 'Chiuso', chiuso_at = now(),
+      tecnico = case when coalesce(wx_ticket.tecnico,'') = '' then upper(coalesce(rap_ticket_chiudi.tecnico,'')) else wx_ticket.tecnico end,
+      storico = storico || jsonb_build_array(jsonb_build_object('quando', now(), 'chi', upper(coalesce(rap_ticket_chiudi.tecnico,'')), 'testo', 'Ticket chiuso dall''app rapportini')),
+      updated_by = null
+    where id = ticket returning * into t;
+  if t.id is null then raise exception 'Ticket non trovato'; end if;
+  return jsonb_build_object('ok', true, 'numero', t.numero, 'stato', t.stato);
+end $$;
+revoke execute on function public.rap_ticket_chiudi(text, uuid, text) from public;
+grant execute on function public.rap_ticket_chiudi(text, uuid, text) to anon, authenticated;
