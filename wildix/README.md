@@ -69,3 +69,10 @@ Finché `config.js` ha i segnaposto il sito parte in **modalità prova**: nessun
 - Sezione **Assistenza** nel gestionale: elenco con filtri (Aperti, Nuovi, Pianificati, Chiusi), badge con i ticket nuovi, scheda con stato, priorità, tecnico (dall'elenco operai dei rapportini), data intervento, note interne, storico e numero rapportino collegato. Link diretto `#ticket=<id>`.
 - Funzione `wx-assist` (Verify JWT disattivato, chiave `WX_BOT_KEY`): azioni `apri_ticket`, `stato_ticket`, `aggiungi_nota`. Il cliente viene riconosciuto lato server (P.IVA, email o ragione sociale); al bot non tornano mai dati di altri clienti.
 - Wildix (Wilma): strumenti `apri_ticket` e `stato_ticket` (categoria Assistenza, credenziale wx-bot) e agente **Assistenza TC Sistem** sul canale Chat, con `avvisa_ufficio` per l'avviso nella chat dell'ufficio. L'agente non ha gli strumenti dei preventivi (niente ricerca clienti né listini).
+
+## Ticket nell'app dei tecnici (raptcsistem)
+
+- Script `supabase/ticket-tecnici.sql`: PIN dei tecnici (impostato in Impostazioni del gestionale, salvato cifrato in `wx_segreti`), funzioni `rap_ticket_lista`, `rap_ticket_prendi`, `rap_ticket_rapportino`, `rap_push_registra` (tutte chiedono il PIN), trigger che a ogni nuovo ticket chiama la funzione `rap-push`.
+- Funzione `rap-push` (Verify JWT disattivato): genera da sola le chiavi VAPID al primo uso e invia le notifiche push ai telefoni iscritti; l'invio è accettato solo dal trigger (segreto `push_hook`).
+- App tecnici (tcsistem.github.io/raptcsistem, stesso indirizzo di sempre): scheda **Ticket** con filtri Aperti / Miei / Da assegnare / Chiusi, "Prendo io", "Fai rapportino" (precompila cliente, indirizzo e descrizione e collega il ticket). Quando il rapportino collegato viene inviato firmato il ticket si chiude; se inviato senza firma il ticket resta aperto con il numero del rapportino. `sw.js` mostra le notifiche anche ad app chiusa (su iPhone l'app va aggiunta alla schermata Home).
+- Gestionale: pagina iniziale con Preventivi, Assistenza, Listini e materiali e il collegamento alla dashboard dei rapportini.
