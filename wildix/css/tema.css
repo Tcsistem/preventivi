@@ -164,3 +164,4 @@ table.righe.wx tr.sez td{background:var(--accent-soft)!important}
 .card-h .row .inp.search{width:240px}
 .conti h3{font-family:var(--f-ui);font-size:12px;letter-spacing:.06em;font-weight:700}
 @media (max-width:979px){.sezioni{flex-wrap:nowrap}.card-h .row .inp.search{width:100%}}
+#rapList .list td:first-child,#rapList .list td:nth-child(2){white-space:nowrap}
