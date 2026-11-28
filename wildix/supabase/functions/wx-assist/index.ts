@@ -15,6 +15,22 @@ const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { sta
 const PRIO: Record<string, string> = { bassa: "Bassa", normale: "Normale", alta: "Alta", urgente: "Urgente" };
 const pulisci = (v: unknown, max = 4000) => String(v ?? "").replace(/\{\{[^}]*\}\}/g, "").trim().slice(0, max);
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\b(s\.?r\.?l\.?s?|s\.?p\.?a\.?|s\.?n\.?c\.?|s\.?a\.?s\.?|spa|srl|snc|sas)\b/g, "").replace(/[^a-z0-9]/g, "");
+// somiglianza 0..1 tra due nomi già compattati: uguali = 1, uno contiene l'altro = 0.95/0.85, altrimenti distanza di Levenshtein
+function somiglianza(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const [corto, lungo] = a.length <= b.length ? [a, b] : [b, a];
+  if (corto.length >= 4 && lungo.startsWith(corto)) return 0.95;
+  if (corto.length >= 4 && lungo.includes(corto)) return 0.85;
+  if (Math.abs(a.length - b.length) > Math.max(a.length, b.length) * 0.5) return 0;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return 1 - prev[b.length] / Math.max(a.length, b.length);
+}
 
 Deno.serve(async (req) => {
   try {
@@ -44,11 +60,14 @@ Deno.serve(async (req) => {
         if (piva) cli = (await sb.from("wx_clienti").select("*").eq("piva", piva).limit(1)).data?.[0] || null;
       }
       if (!cli && email) cli = (await sb.from("wx_clienti").select("*").ilike("email", email).limit(1)).data?.[0] || null;
-      if (!cli && azienda.length > 2) {
-        const parola = azienda.split(/\s+/).sort((x, y) => y.length - x.length)[0].replace(/[%,()*]/g, "");
-        const { data } = await sb.from("wx_clienti").select("*").ilike("rs", `%${parola}%`).limit(50);
-        const n = norm(azienda); const esatti = (data || []).filter((c: any) => norm(c.rs) === n);
-        if (esatti.length === 1) cli = esatti[0];
+      // nome azienda scritto in modo diverso (es. "comep" per "CO.M.E.P. SRL"): confronto sui nomi compattati
+      let suggeriti: any[] = [];
+      if (!cli && azienda.length > 1) {
+        const { data } = await sb.from("wx_clienti").select("id, rs, citta, piva, email, ind, cap, prov").range(0, 4999);
+        const n = norm(azienda);
+        const L = (data || []).map((c: any) => ({ c, s: somiglianza(n, norm(c.rs || "")) })).filter((x) => x.s >= 0.6).sort((x, y) => y.s - x.s);
+        if (L.length && L[0].s >= 0.92 && (L.length === 1 || L[1].s < L[0].s - 0.05)) cli = L[0].c;
+        else suggeriti = L.slice(0, 3).map((x) => ({ id: x.c.id, rs: x.c.rs, citta: x.c.citta || "", punteggio: Math.round(x.s * 100) }));
       }
 
       const canale = pulisci(b.canale, 40) || "chat";
@@ -61,7 +80,7 @@ Deno.serve(async (req) => {
         res = await sb.from("wx_ticket").insert({
           numero, stato: "Nuovo", priorita: urg, canale, cliente_id: cli?.id || null, cliente: cli?.rs || azienda,
           richiedente: pulisci(b.richiedente, 200), telefono, email, indirizzo: pulisci(b.indirizzo, 300) || (cli ? [cli.ind, cli.cap, cli.citta, cli.prov].filter(Boolean).join(" ") : ""),
-          oggetto, descrizione, email_message_id: msgId || null,
+          oggetto, descrizione, email_message_id: msgId || null, cliente_suggeriti: suggeriti,
           storico: [{ quando, chi: canale, testo: "Ticket aperto da " + canale }], created_by: null, updated_by: null,
         }).select("id").single();
         if (!res.error || res.error.code !== "23505") break;

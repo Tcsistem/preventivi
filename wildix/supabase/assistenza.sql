@@ -59,3 +59,6 @@ do $$ begin
     execute 'grant select on public.operai to authenticated';
   end if;
 end $$;
+
+-- clienti "forse è…" proposti dal bot quando il nome scritto non coincide con l'anagrafica
+alter table public.wx_ticket add column if not exists cliente_suggeriti jsonb not null default '[]'::jsonb;

@@ -194,8 +194,14 @@ function calc(o){
 }
 
 /* ---------------------------------------------------------------- viste */
-function show(view){
-  $$(".tab").forEach(t => t.setAttribute("aria-selected", String(t.dataset.view===view)));
+const SEZ_VISTA = {preventivi:"offerta", assistenza:"assistenza", catalogo:"listini", impostazioni:"impostazioni"};
+S.sez = "preventivi";
+function show(view, sez){
+  if (!sez){ const cur = $(`.tab[data-sez="${S.sez}"][data-view="${view}"]`); sez = cur ? S.sez : ($(`.tab[data-view="${view}"]`)||{dataset:{}}).dataset.sez || S.sez; }
+  S.sez = sez;
+  $$(".sez").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.sez===sez)));
+  $$(".tab").forEach(t => { t.hidden = t.dataset.sez !== sez; t.setAttribute("aria-selected", String(t.dataset.sez===sez && t.dataset.view===view)); });
+  $(".tabs").hidden = $$(`.tab[data-sez="${sez}"]`).length < 2;
   $$(".view").forEach(v => v.hidden = v.id !== "v-"+view);
   if (view==="archivio") renderArchivio();
   if (view==="clienti") renderClienti();
@@ -205,7 +211,9 @@ function show(view){
   if (view==="impostazioni") renderSettings();
   window.scrollTo(0,0);
 }
-$$(".tab").forEach(t => t.addEventListener("click", () => show(t.dataset.view)));
+$$(".tab").forEach(t => t.addEventListener("click", () => show(t.dataset.view, t.dataset.sez)));
+$$(".sez").forEach(b => b.addEventListener("click", () => show(SEZ_VISTA[b.dataset.sez], b.dataset.sez)));
+show("offerta", "preventivi");
 function setStatus(){
   $("#dot").className = "dot " + (S.dirty ? "dirty" : "ok");
   $("#statusText").textContent = S.saving ? "Salvataggio…" : S.dirty ? "Modifiche non salvate" : (S.offer && S.offer.isNew ? "Offerta nuova, non ancora salvata" : "Tutto salvato");
@@ -848,7 +856,7 @@ function renderTicket(){
   $("#tkList").innerHTML = L.length ? `<div class="tablewrap" style="border:0"><table class="list"><thead><tr><th>Nr.</th><th>Aperto</th><th>Stato</th><th>Priorità</th><th>Cliente / richiedente</th><th>Oggetto</th><th>Tecnico</th><th>Intervento</th><th>Canale</th></tr></thead><tbody>
     ${L.map(t => `<tr class="click" data-id="${esc(t.id)}"><td><b>${esc(t.numero)}</b></td><td class="hint">${new Date(t.created_at).toLocaleString("it-IT",{dateStyle:"short",timeStyle:"short"})}</td>
       <td><span class="chip ${tkChip(t.stato)}">${esc(t.stato)}</span></td><td>${t.priorita!=="Normale"?`<span class="chip ${prioChip(t.priorita)}">${esc(t.priorita)}</span>`:"Normale"}</td>
-      <td>${esc(t.cliente||"—")}${t.richiedente?`<div class="hint">${esc(t.richiedente)}${t.telefono?" · "+esc(t.telefono):""}</div>`:""}</td>
+      <td>${esc(t.cliente||"—")}${t.cliente && !t.cliente_id ? ' <span class="chip warn" title="Cliente non collegato all\'anagrafica">da verificare</span>' : ""}${t.richiedente?`<div class="hint">${esc(t.richiedente)}${t.telefono?" · "+esc(t.telefono):""}</div>`:""}</td>
       <td>${esc(t.oggetto)}</td><td>${esc(t.tecnico)}</td><td>${fmtDate(t.data_intervento)}</td><td class="hint">${esc(t.canale)}</td></tr>`).join("")}
     </tbody></table></div>` : `<div class="empty"><b>Nessun ticket</b>${f==="aperti"?"Non ci sono richieste aperte.":"Nessun ticket con questo filtro."}</div>`;
 }
@@ -858,6 +866,21 @@ $("#qTk").addEventListener("input", renderTicket);
 $("#bTkAggiorna").addEventListener("click", loadTicket);
 $("#tkList").addEventListener("click", e => { const tr = e.target.closest("tr[data-id]"); if (tr) editTicket(S.ticket.find(t => String(t.id) === tr.dataset.id)); });
 $("#bNuovoTk").addEventListener("click", () => editTicket(null));
+const normRs = s => String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\b(s\.?r\.?l\.?s?|s\.?p\.?a\.?|s\.?n\.?c\.?|s\.?a\.?s\.?|spa|srl|snc|sas)\b/g,"").replace(/[^a-z0-9]/g,"");
+function somiglianza(a, b){
+  if (!a || !b) return 0; if (a === b) return 1;
+  const [c, l] = a.length <= b.length ? [a, b] : [b, a];
+  if (c.length >= 4 && l.startsWith(c)) return 0.95;
+  if (c.length >= 4 && l.includes(c)) return 0.85;
+  if (Math.abs(a.length - b.length) > Math.max(a.length, b.length) * 0.5) return 0;
+  let prev = Array.from({length:b.length+1}, (_, j) => j);
+  for (let i = 1; i <= a.length; i++){ const cur = [i]; for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(a[i-1]===b[j-1]?0:1)); prev = cur; }
+  return 1 - prev[b.length] / Math.max(a.length, b.length);
+}
+function clientiSimili(nome){
+  const n = normRs(nome); if (n.length < 2) return [];
+  return S.clienti.map(c => ({c, s: somiglianza(n, normRs(c.rs))})).filter(x => x.s >= 0.6).sort((x, y) => y.s - x.s).slice(0, 4).map(x => x.c);
+}
 function editTicket(t){
   const nuovo = !t;
   t = t ? clone(t) : {stato:"Nuovo", priorita:"Normale", canale:"manuale", cliente:"", cliente_id:null, richiedente:"", telefono:"", email:"", indirizzo:"", oggetto:"", descrizione:"", tecnico:"", data_intervento:"", note_interne:"", storico:[], rapportino:""};
@@ -866,7 +889,7 @@ function editTicket(t){
   const L = openLayer(`<div class="dialog wide"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">${nuovo?"Nuovo ticket":"Ticket "+esc(t.numero)}</h2>
       ${nuovo?"":`<span class="chip ${tkChip(t.stato)}">${esc(t.stato)}</span><span class="hint">aperto il ${new Date(t.created_at).toLocaleString("it-IT",{dateStyle:"short",timeStyle:"short"})} da ${esc(t.canale)}</span>`}</div>
     <div class="grid g4">
-      <label class="f span2">Cliente<input data-t="cliente" list="dlClienti" value="${esc(t.cliente)}" placeholder="Cerca in anagrafica o scrivi il nome"></label>
+      <label class="f span2">Cliente<input data-t="cliente" list="dlClienti" value="${esc(t.cliente)}" placeholder="Cerca in anagrafica o scrivi il nome"><div class="suggest" id="tkSugg"></div></label>
       <label class="f">Stato${sel("stato", TK_STATI)}</label>
       <label class="f">Priorità${sel("priorita", TK_PRIO)}</label>
       <label class="f">Richiedente<input data-t="richiedente" value="${esc(t.richiedente)}"></label>
@@ -883,6 +906,14 @@ function editTicket(t){
     ${nuovo?"":`<div class="sec-t">Storico</div><div class="row" style="align-items:flex-start"><textarea class="inp" id="tkNota" rows="2" placeholder="Aggiungi una nota allo storico…" style="flex:1"></textarea><button class="btn" data-x="nota" type="button">Aggiungi</button></div><div class="tkstorico">${storico||'<p class="hint">Nessuna voce.</p>'}</div>`}
     <div class="foot">${nuovo?"":`<button class="btn ghost danger" data-x="del" type="button" style="margin-right:auto">Elimina</button>${t.stato!=="Chiuso"?`<button class="btn" data-x="chiudi" type="button">Chiudi ticket</button>`:""}`}
       <button class="btn" data-x="no" type="button">Annulla</button><button class="btn primary" data-x="ok" type="button">Salva</button></div></div>`);
+  const inCli = $('[data-t="cliente"]', L), boxS = $("#tkSugg", L);
+  const suggerisci = () => {
+    const v = inCli.value.trim(), ok = S.clienti.find(x => x.rs.toLowerCase() === v.toLowerCase());
+    const L2 = ok ? [] : clientiSimili(v);
+    boxS.innerHTML = ok ? `<span class="chip good">In anagrafica</span>` : L2.length ? `<span class="hint">Forse è:</span>` + L2.map(c => `<button type="button" class="btn sm" data-rs="${esc(c.rs)}">${esc(c.rs)}${c.citta?" · "+esc(c.citta):""}</button>`).join("") : (v ? `<span class="hint">Non trovato in anagrafica</span>` : "");
+  };
+  inCli.addEventListener("input", suggerisci); suggerisci();
+  boxS.addEventListener("click", e => { const b = e.target.closest("[data-rs]"); if (!b) return; e.preventDefault(); inCli.value = b.dataset.rs; suggerisci(); });
   const leggi = () => { const r = {}; $$("[data-t]", L).forEach(i => r[i.dataset.t] = i.value.trim()); r.data_intervento = r.data_intervento || null;
     const c = S.clienti.find(x => x.rs.toLowerCase() === r.cliente.toLowerCase()); r.cliente_id = c ? c.id : (r.cliente === t.cliente ? t.cliente_id : null);
     if (c && !r.indirizzo) r.indirizzo = [c.ind, c.cap, c.citta, c.prov].filter(Boolean).join(" ");
