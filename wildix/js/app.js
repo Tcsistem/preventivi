@@ -194,8 +194,8 @@ function calc(o){
 }
 
 /* ---------------------------------------------------------------- viste */
-const SEZ_VISTA = {preventivi:"offerta", assistenza:"assistenza", catalogo:"listini", impostazioni:"impostazioni"};
-S.sez = "preventivi";
+const SEZ_VISTA = {home:"home", preventivi:"offerta", assistenza:"assistenza", catalogo:"listini", impostazioni:"impostazioni"};
+S.sez = "home";
 function show(view, sez){
   if (!sez){ const cur = $(`.tab[data-sez="${S.sez}"][data-view="${view}"]`); sez = cur ? S.sez : ($(`.tab[data-view="${view}"]`)||{dataset:{}}).dataset.sez || S.sez; }
   S.sez = sez;
@@ -208,12 +208,23 @@ function show(view, sez){
   if (view==="listini") renderListini();
   if (view==="materiali") renderMiei();
   if (view==="assistenza"){ renderTicket(); loadTicket(); }
+  if (view==="home") renderHome();
   if (view==="impostazioni") renderSettings();
   window.scrollTo(0,0);
 }
 $$(".tab").forEach(t => t.addEventListener("click", () => show(t.dataset.view, t.dataset.sez)));
 $$(".sez").forEach(b => b.addEventListener("click", () => show(SEZ_VISTA[b.dataset.sez], b.dataset.sez)));
-show("offerta", "preventivi");
+show("home", "home");
+$$("[data-go]").forEach(b => b.addEventListener("click", () => show(SEZ_VISTA[b.dataset.go], b.dataset.go)));
+$(".brand").style.cursor = "pointer"; $(".brand").addEventListener("click", () => show("home", "home"));
+function renderHome(){
+  const h = new Date().getHours(), nome = (S.profilo && S.profilo.nome) ? ", " + S.profilo.nome : "";
+  $("#homeSaluto").textContent = (h < 14 ? "Buongiorno" : "Buonasera") + nome;
+  const nTk = (S.ticket || []).filter(t => t.stato === "Nuovo").length, nAp = (S.ticket || []).filter(t => t.stato !== "Chiuso").length;
+  $("#homeNTk").textContent = nTk ? nTk + (nTk === 1 ? " nuovo" : " nuovi") : (nAp ? nAp + " aperti" : ""); $("#homeNTk").classList.toggle("red", !!nTk);
+  const nRich = (S.offerte || []).filter(o => o.stato === "Richiesta").length;
+  $("#homeNOff").textContent = nRich ? nRich + (nRich === 1 ? " richiesta da preparare" : " richieste da preparare") : "";
+}
 function setStatus(){
   $("#dot").className = "dot " + (S.dirty ? "dirty" : "ok");
   $("#statusText").textContent = S.saving ? "Salvataggio…" : S.dirty ? "Modifiche non salvate" : (S.offer && S.offer.isNew ? "Offerta nuova, non ancora salvata" : "Tutto salvato");
@@ -712,7 +723,19 @@ $("#bEspMat").addEventListener("click", () => {
 });
 
 /* ---------------------------------------------------------------- impostazioni */
+$("#bPinTec").addEventListener("click", async () => {
+  const pin = $("#sPinTec").value.trim();
+  if (pin.length < 6) return toast("Il PIN deve avere almeno 6 caratteri");
+  const {error} = await S.sb.rpc("wx_imposta_pin_tecnici", {pin});
+  if (error) return toast(errMsg(error));
+  $("#sPinTec").value = ""; $("#pinTecHint").textContent = "PIN impostato. Comunicalo ai tecnici."; toast("PIN dei tecnici impostato");
+});
+async function statoPinTec(){
+  const {data, error} = await S.sb.rpc("wx_pin_tecnici_impostato");
+  $("#pinTecHint").textContent = error ? "" : data ? "PIN già impostato." : "PIN non ancora impostato: i tecnici non vedono i ticket.";
+}
 function renderSettings(){
+  statoPinTec();
   const s = S.settings, a = s.azienda, c = s.cond;
   $("#sAzNome").value = a.nome; $("#sAzTel").value = a.tel; $("#sAzDet").value = a.dettagli;
   $("#sLogoPrev").src = a.logo || ""; $("#sLogoPrev").hidden = !a.logo; $("#bLogoVia").hidden = !a.logo;
@@ -844,6 +867,7 @@ async function loadTicket(){
   const n = S.ticket.filter(t => t.stato === "Nuovo").length, b = $("#tkBadge");
   b.textContent = n; b.hidden = !n;
   if (!$("#v-assistenza").hidden) renderTicket();
+  if (!$("#v-home").hidden) renderHome();
 }
 async function loadTecnici(){
   const {data} = await S.sb.from("operai").select("nome").order("nome");

@@ -62,6 +62,8 @@
         const m = new Map(); DB.wx_listino.forEach(r=>{ const k=r.versione+"|"+r.listino; m.set(k,(m.get(k)||0)+1); });
         return {data:[...m].map(([k,n])=>{ const [versione,listino]=k.split("|"); return {versione, listino, righe:n}; }), error:null};
       }
+      if (fn==="wx_pin_tecnici_impostato") return {data:!!DB._pin, error:null};
+      if (fn==="wx_imposta_pin_tecnici"){ DB._pin = true; salva(); return {data:null, error:null}; }
       if (fn==="wx_prossimo_ticket"){
         const yy=String(new Date().getFullYear()).slice(2); let m=0; (DB.wx_ticket||[]).forEach(o=>{ const x=String(o.numero).match(/^T(\d+)-(\d{2})$/); if(x&&x[2]===yy) m=Math.max(m,+x[1]); });
         return {data:`T${String(m+1).padStart(3,"0")}-${yy}`, error:null};

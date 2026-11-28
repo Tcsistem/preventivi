@@ -6,8 +6,8 @@
 <title>TC Sistem Preventivi</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="../css/app.css?v=202611281658">
-<link rel="stylesheet" href="css/wx.css?v=202611281658">
+<link rel="stylesheet" href="../css/app.css?v=202611281724">
+<link rel="stylesheet" href="css/wx.css?v=202611281724">
 </head>
 <body>
 
@@ -42,13 +42,16 @@
     <div class="user"><span>Accesso: <b id="userName"></b></span><button class="btn sm" id="bEsci" type="button">Esci</button></div>
   </div>
   <nav class="sezioni" aria-label="Sezioni">
-    <button class="sez" type="button" data-sez="preventivi" aria-pressed="true">Preventivi</button>
+    <button class="sez sez-home" type="button" data-sez="home" aria-pressed="true" title="Pagina iniziale">⌂</button>
+    <button class="sez" type="button" data-sez="preventivi" aria-pressed="false">Preventivi</button>
     <button class="sez" type="button" data-sez="assistenza" aria-pressed="false">Assistenza <span class="badge" id="tkBadge" hidden></span></button>
     <button class="sez" type="button" data-sez="catalogo" aria-pressed="false">Listini e materiali</button>
+    <a class="sez ext" href="https://tcsistem.github.io/raptcsistem/dashboard.html" target="_blank" rel="noopener">Rapportini ↗</a>
     <button class="sez" type="button" data-sez="impostazioni" aria-pressed="false">Impostazioni</button>
   </nav>
   <nav class="tabs" role="tablist">
-    <button class="tab" role="tab" data-sez="preventivi" data-view="offerta" aria-selected="true">Offerta</button>
+    <button class="tab" role="tab" data-sez="home" data-view="home" aria-selected="true" hidden>Home</button>
+    <button class="tab" role="tab" data-sez="preventivi" data-view="offerta" aria-selected="false">Offerta</button>
     <button class="tab" role="tab" data-sez="preventivi" data-view="archivio" aria-selected="false">Archivio offerte</button>
     <button class="tab" role="tab" data-sez="preventivi" data-view="clienti" aria-selected="false">Clienti</button>
     <button class="tab" role="tab" data-sez="assistenza" data-view="assistenza" aria-selected="false">Ticket</button>
@@ -61,8 +64,21 @@
 <div class="banner" id="banner" hidden></div>
 
 <main>
+<!-- ============ HOME ============ -->
+<section class="view" id="v-home">
+  <div class="home">
+    <p class="home-saluto" id="homeSaluto">Buongiorno</p>
+    <div class="home-grid">
+      <button class="home-btn" type="button" data-go="preventivi"><span class="ico">📄</span><b>Preventivi</b><small>Nuova offerta, archivio offerte, clienti</small><span class="home-n" id="homeNOff"></span></button>
+      <button class="home-btn" type="button" data-go="assistenza"><span class="ico">🛠</span><b>Assistenza</b><small>Ticket da Fred, dalle email e inseriti a mano</small><span class="home-n red" id="homeNTk"></span></button>
+      <button class="home-btn" type="button" data-go="catalogo"><span class="ico">📦</span><b>Listini e materiali</b><small>Listini Wildix e materiali di TC Sistem</small></button>
+    </div>
+    <a class="home-link" href="https://tcsistem.github.io/raptcsistem/dashboard.html" target="_blank" rel="noopener"><span class="ico">📋</span><span><b>Dashboard rapportini</b><small>I rapportini eseguiti dai tecnici (si apre in una nuova scheda)</small></span><span>↗</span></a>
+  </div>
+</section>
+
 <!-- ============ OFFERTA ============ -->
-<section class="view" id="v-offerta">
+<section class="view" id="v-offerta" hidden>
   <div class="work">
     <div>
       <div class="card">
@@ -317,6 +333,13 @@
     </div>
   </div>
   <div class="card">
+    <div class="card-h"><h2>App dei tecnici (rapportini)</h2></div>
+    <p class="hint" style="margin-top:0">I tecnici vedono i ticket nella scheda <b>Ticket</b> della loro app, li prendono in carico, fanno il rapportino collegato e ricevono la notifica dei nuovi ticket.
+      Al primo uso l'app chiede questo PIN (almeno 6 caratteri): dallo solo ai tecnici. Se lo cambi, i telefoni lo richiederanno.</p>
+    <div class="row"><input class="inp" id="sPinTec" type="password" autocomplete="new-password" placeholder="Nuovo PIN tecnici" style="max-width:220px">
+      <button class="btn" id="bPinTec" type="button">Imposta PIN</button><span class="hint" id="pinTecHint"></span></div>
+  </div>
+  <div class="card">
     <div class="card-h"><h2>Fatture in Cloud</h2></div>
     <p class="hint" style="margin-top:0">Dal riquadro economico dell'offerta crei una <b>fattura proforma</b> in Fatture in Cloud con tutte le righe una tantum e il primo periodo dei canoni.
       Il cliente viene cercato per P.IVA e, se non c'è, aggiunto all'anagrafica di Fatture in Cloud. Il collegamento usa un token che resta nei segreti di Supabase (non nel sito).</p>
@@ -335,8 +358,8 @@
 <div id="printArea"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="js/config.js?v=202611281658"></script>
-<script src="js/prova.js?v=202611281658"></script>
-<script src="js/app.js?v=202611281658"></script>
+<script src="js/config.js?v=202611281724"></script>
+<script src="js/prova.js?v=202611281724"></script>
+<script src="js/app.js?v=202611281724"></script>
 </body>
 </html>
