@@ -88,10 +88,42 @@ Deno.serve(async (req) => {
       const arts = (grezzi || []).filter((a: any) => a.listino === "PERSONALE" || a.versione === versione);
       const sconto = num(set.sconto), ricarico = set.ricarico === undefined ? 30 : num(set.ricarico);
       const righe: any[] = [], nonTrovati: string[] = [];
+
+      // articoli non presenti a listino: diventano Materiali "da prezzare" (senza prezzo) e vanno comunque nell'offerta.
+      // Se esiste già un materiale con la stessa descrizione lo riuso, così non si creano doppioni.
+      const conosciuti = new Set((arts || []).map((a: any) => a.codice.toLowerCase()));
+      const ignoti = [...new Set(codici.filter((c) => !conosciuti.has(c.toLowerCase())))];
+      const nuovi = new Map<string, any>();
+      if (ignoti.length) {
+        const { data: mats } = await sb.from("wx_listino").select("*").eq("listino", "PERSONALE");
+        let seq = 0; (mats || []).forEach((m: any) => { const x = String(m.codice).match(/^MAT-(\d+)$/); if (x) seq = Math.max(seq, +x[1]); });
+        for (const t of ignoti) {
+          const es = (mats || []).find((m: any) => String(m.descrizione).trim().toLowerCase() === t.trim().toLowerCase());
+          if (es) { nuovi.set(t.toLowerCase(), es); continue; }
+          const row = { versione: "Miei", listino: "PERSONALE", fascia: "", codice: "MAT-" + String(++seq).padStart(4, "0"), descrizione: t.trim(),
+            categoria: "Da prezzare (bot)", marca: "", um: "", periodo: "", prezzo_gold: 0, prezzo_eu: 0 };
+          const ins = await sb.from("wx_listino").insert(row).select("*").single();
+          if (!ins.error) nuovi.set(t.toLowerCase(), ins.data);
+        }
+      }
+
       codici.forEach((cod, i) => {
         const q = qta[i] > 0 ? qta[i] : 1;
         const tutte = (arts || []).filter((a: any) => a.codice.toLowerCase() === cod.toLowerCase());
-        if (!tutte.length) { nonTrovati.push(cod); righe.push({ id: uuid(), tipo: "libera", fonte: "", codice: "", descr: cod + " (da verificare)", periodo: "", qta: q, costo: "", listino: "", perc: ricarico, prezzo: "", modo: "ric" }); return; }
+        if (!tutte.length) {
+          const m = nuovi.get(cod.toLowerCase());
+          if (m) {
+            nonTrovati.push(`${m.codice} ${m.descrizione}`);
+            righe.push({ id: uuid(), tipo: "art", fonte: "PERSONALE", codice: m.codice, descr: m.descrizione, descrEn: m.descrizione, categoria: m.categoria,
+              periodo: m.periodo || "", qta: q, costo: num(m.prezzo_gold), listino: num(m.prezzo_eu), fascia: "", auto: false, um: m.um || "",
+              modo: num(m.prezzo_eu) > 0 ? "sc" : "ric", perc: num(m.prezzo_eu) > 0 ? 0 : ricarico,
+              prezzo: num(m.prezzo_eu) > 0 ? r2(num(m.prezzo_eu)) : r2(num(m.prezzo_gold) * (1 + ricarico / 100)) });
+          } else {
+            nonTrovati.push(cod);
+            righe.push({ id: uuid(), tipo: "libera", fonte: "", codice: "", descr: cod + " (da verificare)", periodo: "", qta: q, costo: "", listino: "", perc: ricarico, prezzo: "", modo: "ric" });
+          }
+          return;
+        }
         const fonte = tutte.find((a: any) => a.listino !== "PERSONALE")?.listino || "PERSONALE";
         const delListino = tutte.filter((a: any) => a.listino === fonte).sort((a: any, b: any) => (a.q_min ?? 0) - (b.q_min ?? 0));
         const conFasce = delListino.filter((a: any) => a.q_min !== null);
@@ -130,10 +162,10 @@ Deno.serve(async (req) => {
         if (!res.error || res.error.code !== "23505") break;
       }
       if (res.error) throw new Error(res.error.message);
-      const riepilogo = righe.map((r) => `${r.qta} × ${r.codice || r.descr}`).join(", ");
+      const riepilogo = righe.map((r) => `${r.qta} × ${r.fonte === "PERSONALE" ? r.descr : (r.codice || r.descr)}`).join(", ");
       return json({ ok: true, numero, cliente: nomeCliente, venditore, righe: righe.length, riepilogo, articoli_non_trovati: nonTrovati, note,
         link: SITO + "#offerta=" + res.data.id,
-        messaggio_ufficio: `Nuova richiesta d'offerta ${numero} da ${venditore} per ${nomeCliente}: ${riepilogo}.${note ? " Note: " + note : ""}${nonTrovati.length ? " Da verificare: " + nonTrovati.join(", ") + "." : ""} ${SITO}#offerta=${res.data.id}` });
+        messaggio_ufficio: `Nuova richiesta d'offerta ${numero} da ${venditore} per ${nomeCliente}: ${riepilogo}.${note ? " Note: " + note : ""}${nonTrovati.length ? " Nuovi materiali da prezzare: " + nonTrovati.join(", ") + "." : ""} ${SITO}#offerta=${res.data.id}` });
     }
 
     return json({ errore: "Azione sconosciuta: usa cerca_cliente, cerca_articolo o crea_richiesta." }, 400);

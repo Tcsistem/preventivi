@@ -233,7 +233,7 @@ function richInfo(){
   if (!R){ el.hidden = true; return; }
   el.hidden = false;
   el.innerHTML = `<b>Richiesta dal ${esc(R.canale||"bot")}</b> · venditore <b>${esc(R.venditore||"")}</b>${R.quando?" · "+new Date(R.quando).toLocaleString("it-IT",{dateStyle:"short",timeStyle:"short"}):""}
-    ${R.note?`<div>Note: ${esc(R.note)}</div>`:""}${R.non_trovati&&R.non_trovati.length?`<div class="neg">Articoli da verificare: ${esc(R.non_trovati.join(", "))}</div>`:""}
+    ${R.note?`<div>Note: ${esc(R.note)}</div>`:""}${R.non_trovati&&R.non_trovati.length?`<div class="neg">Nuovi materiali da prezzare (aggiunti in Materiali senza prezzo): ${esc(R.non_trovati.join(", "))}</div>`:""}
     <div class="hint">Controlla righe, sconti e costi interni, poi cambia lo stato in Bozza o Inviata.</div>`;
 }
 function chipStato(){ const s=S.offer.stato, c=$("#hStato"); c.textContent=s; c.className="chip "+(s==="Accettata"?"good":s==="Inviata"?"navy":s==="Persa"?"red":s==="Richiesta"?"warn":""); }
